@@ -498,6 +498,87 @@ pub unsafe extern "C" fn sge_phys_collider_set_sensor(world: *mut c_void, collid
 }
 
 // ---------------------------------------------------------------------------
+// Collision filtering
+// ---------------------------------------------------------------------------
+
+/// Sets the collision groups for a collider.
+/// `memberships` defines which groups this collider belongs to.
+/// `filter` defines which groups this collider can collide with.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_set_collision_groups(
+    world: *mut c_void,
+    collider: u64,
+    memberships: u32,
+    filter: u32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
+        c.set_collision_groups(InteractionGroups::new(
+            Group::from_bits_truncate(memberships),
+            Group::from_bits_truncate(filter),
+        ));
+    }
+}
+
+/// Gets the collision groups for a collider.
+/// Fills `out` with [memberships, filter] as two u32 values (cast to i32 for C ABI).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_get_collision_groups(
+    world: *mut c_void,
+    collider: u64,
+    out: *mut i32,
+) {
+    let w = &*(world as *mut PhysicsWorld);
+    let arr = slice::from_raw_parts_mut(out, 2);
+    if let Some(c) = w.collider_set.get(u64_to_collider_handle(collider)) {
+        let groups = c.collision_groups();
+        arr[0] = groups.memberships.bits() as i32;
+        arr[1] = groups.filter.bits() as i32;
+    } else {
+        arr[0] = 0;
+        arr[1] = 0;
+    }
+}
+
+/// Sets the solver groups for a collider.
+/// Solver groups control which colliders have their contacts solved (force response).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_set_solver_groups(
+    world: *mut c_void,
+    collider: u64,
+    memberships: u32,
+    filter: u32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
+        c.set_solver_groups(InteractionGroups::new(
+            Group::from_bits_truncate(memberships),
+            Group::from_bits_truncate(filter),
+        ));
+    }
+}
+
+/// Gets the solver groups for a collider.
+/// Fills `out` with [memberships, filter] as two u32 values (cast to i32 for C ABI).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_get_solver_groups(
+    world: *mut c_void,
+    collider: u64,
+    out: *mut i32,
+) {
+    let w = &*(world as *mut PhysicsWorld);
+    let arr = slice::from_raw_parts_mut(out, 2);
+    if let Some(c) = w.collider_set.get(u64_to_collider_handle(collider)) {
+        let groups = c.solver_groups();
+        arr[0] = groups.memberships.bits() as i32;
+        arr[1] = groups.filter.bits() as i32;
+    } else {
+        arr[0] = 0;
+        arr[1] = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Joints
 // ---------------------------------------------------------------------------
 
@@ -570,6 +651,386 @@ pub unsafe extern "C" fn sge_phys_destroy_joint(world: *mut c_void, joint: u64) 
 }
 
 // ---------------------------------------------------------------------------
+// Revolute joint limits and motors
+// ---------------------------------------------------------------------------
+
+fn u64_to_joint_handle(v: u64) -> ImpulseJointHandle {
+    let index = v as u32;
+    let generation = (v >> 32) as u32;
+    ImpulseJointHandle::from_raw_parts(index, generation)
+}
+
+/// Enables or disables angular limits on a revolute joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_enable_limits(
+    world: *mut c_void,
+    joint: u64,
+    enable: i32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute_mut() {
+            if enable != 0 {
+                // Enable with reasonable default limits if not already set
+                if rev.limits().is_none() {
+                    rev.set_limits([-std::f32::consts::PI, std::f32::consts::PI]);
+                }
+            } else {
+                // Rapier doesn't have a direct "disable limits" - we set very wide limits
+                rev.set_limits([-1000.0, 1000.0]);
+            }
+        }
+    }
+}
+
+/// Sets the angular limits (in radians) for a revolute joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_set_limits(
+    world: *mut c_void,
+    joint: u64,
+    lower: f32,
+    upper: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute_mut() {
+            rev.set_limits([lower, upper]);
+        }
+    }
+}
+
+/// Gets the angular limits for a revolute joint. Fills `out` with [lower, upper].
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_get_limits(
+    world: *mut c_void,
+    joint: u64,
+    out: *mut f32,
+) {
+    let w = &*(world as *mut PhysicsWorld);
+    let arr = slice::from_raw_parts_mut(out, 2);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute() {
+            if let Some(limits) = rev.limits() {
+                arr[0] = limits.min;
+                arr[1] = limits.max;
+                return;
+            }
+        }
+    }
+    arr[0] = 0.0;
+    arr[1] = 0.0;
+}
+
+/// Returns 1 if the revolute joint has limits enabled, 0 otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_is_limit_enabled(
+    world: *mut c_void,
+    joint: u64,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute() {
+            if let Some(limits) = rev.limits() {
+                // Consider limits "disabled" if they span a very wide range
+                if limits.min <= -100.0 && limits.max >= 100.0 {
+                    return 0;
+                }
+                return 1;
+            }
+        }
+    }
+    0
+}
+
+/// Enables the motor on a revolute joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_enable_motor(
+    world: *mut c_void,
+    joint: u64,
+    enable: i32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute_mut() {
+            if enable != 0 {
+                // Enable motor with velocity target
+                rev.set_motor_velocity(0.0, 1.0);
+            } else {
+                // Disable motor by setting zero max torque
+                rev.set_motor_velocity(0.0, 0.0);
+            }
+        }
+    }
+}
+
+/// Sets the target velocity for the revolute joint motor (radians/second).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_set_motor_speed(
+    world: *mut c_void,
+    joint: u64,
+    speed: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute_mut() {
+            // Get current damping factor, preserve it
+            let damping = rev.motor().map(|m| m.damping).unwrap_or(1.0);
+            rev.set_motor_velocity(speed, damping);
+        }
+    }
+}
+
+/// Sets the maximum torque the revolute joint motor can apply.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_set_max_motor_torque(
+    world: *mut c_void,
+    joint: u64,
+    torque: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute_mut() {
+            rev.set_motor_max_force(torque);
+        }
+    }
+}
+
+/// Gets the current motor speed setting for a revolute joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_get_motor_speed(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute() {
+            if let Some(motor) = rev.motor() {
+                return motor.target_vel;
+            }
+        }
+    }
+    0.0
+}
+
+/// Gets the current angle of the revolute joint (radians).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_revolute_joint_get_angle(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        if let Some(rev) = j.data.as_revolute() {
+            // Get body rotations to compute joint angle
+            let body1_handle = j.body1;
+            let body2_handle = j.body2;
+            if let (Some(b1), Some(b2)) = (
+                w.rigid_body_set.get(body1_handle),
+                w.rigid_body_set.get(body2_handle),
+            ) {
+                return rev.angle(b1.rotation(), b2.rotation());
+            }
+        }
+    }
+    0.0
+}
+
+// ---------------------------------------------------------------------------
+// Prismatic joint limits and motors
+// ---------------------------------------------------------------------------
+
+/// Enables or disables translation limits on a prismatic joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_prismatic_joint_enable_limits(
+    world: *mut c_void,
+    joint: u64,
+    enable: i32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(pris) = j.data.as_prismatic_mut() {
+            if enable != 0 {
+                // Enable with reasonable default limits if not already set
+                if pris.limits().is_none() {
+                    pris.set_limits([-1.0, 1.0]);
+                }
+            } else {
+                pris.set_limits([-1e6, 1e6]);
+            }
+        }
+    }
+}
+
+/// Sets the translation limits for a prismatic joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_prismatic_joint_set_limits(
+    world: *mut c_void,
+    joint: u64,
+    lower: f32,
+    upper: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(pris) = j.data.as_prismatic_mut() {
+            pris.set_limits([lower, upper]);
+        }
+    }
+}
+
+/// Gets the translation limits for a prismatic joint. Fills `out` with [lower, upper].
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_prismatic_joint_get_limits(
+    world: *mut c_void,
+    joint: u64,
+    out: *mut f32,
+) {
+    let w = &*(world as *mut PhysicsWorld);
+    let arr = slice::from_raw_parts_mut(out, 2);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        if let Some(pris) = j.data.as_prismatic() {
+            if let Some(limits) = pris.limits() {
+                arr[0] = limits.min;
+                arr[1] = limits.max;
+                return;
+            }
+        }
+    }
+    arr[0] = 0.0;
+    arr[1] = 0.0;
+}
+
+/// Enables the motor on a prismatic joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_prismatic_joint_enable_motor(
+    world: *mut c_void,
+    joint: u64,
+    enable: i32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(pris) = j.data.as_prismatic_mut() {
+            if enable != 0 {
+                pris.set_motor_velocity(0.0, 1.0);
+            } else {
+                pris.set_motor_velocity(0.0, 0.0);
+            }
+        }
+    }
+}
+
+/// Sets the target velocity for the prismatic joint motor.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_prismatic_joint_set_motor_speed(
+    world: *mut c_void,
+    joint: u64,
+    speed: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(pris) = j.data.as_prismatic_mut() {
+            let damping = pris.motor().map(|m| m.damping).unwrap_or(1.0);
+            pris.set_motor_velocity(speed, damping);
+        }
+    }
+}
+
+/// Sets the maximum force the prismatic joint motor can apply.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_prismatic_joint_set_max_motor_force(
+    world: *mut c_void,
+    joint: u64,
+    force: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(pris) = j.data.as_prismatic_mut() {
+            pris.set_motor_max_force(force);
+        }
+    }
+}
+
+/// Gets the current translation of the prismatic joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_prismatic_joint_get_translation(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        if let Some(_pris) = j.data.as_prismatic() {
+            // Get the bodies to compute actual translation
+            let body1_handle = j.body1;
+            let body2_handle = j.body2;
+            if let (Some(b1), Some(b2)) = (
+                w.rigid_body_set.get(body1_handle),
+                w.rigid_body_set.get(body2_handle),
+            ) {
+                // Compute the displacement between body centers
+                // This gives an approximate translation along the joint axis
+                let diff = b2.translation() - b1.translation();
+                return diff.norm();
+            }
+        }
+    }
+    0.0
+}
+
+// ---------------------------------------------------------------------------
+// Body mass/inertia queries
+// ---------------------------------------------------------------------------
+
+/// Gets the total mass of a rigid body.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_body_get_mass(world: *mut c_void, body: u64) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| b.mass())
+        .unwrap_or(0.0)
+}
+
+/// Gets the angular inertia of a rigid body.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_body_get_inertia(world: *mut c_void, body: u64) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| {
+            // In 2D, principal_inertia returns the single rotational inertia value
+            b.mass_properties().local_mprops.principal_inertia()
+        })
+        .unwrap_or(0.0)
+}
+
+/// Gets the local center of mass. Fills `out` with [x, y].
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_body_get_local_center_of_mass(
+    world: *mut c_void,
+    body: u64,
+    out: *mut f32,
+) {
+    let w = &*(world as *mut PhysicsWorld);
+    let arr = slice::from_raw_parts_mut(out, 2);
+    if let Some(b) = w.rigid_body_set.get(u64_to_body_handle(body)) {
+        let com = b.mass_properties().local_mprops.local_com;
+        arr[0] = com.x;
+        arr[1] = com.y;
+    } else {
+        arr[0] = 0.0;
+        arr[1] = 0.0;
+    }
+}
+
+/// Forces recomputation of mass properties from attached colliders.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_body_recompute_mass_properties(world: *mut c_void, body: u64) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
+        b.recompute_mass_properties_from_colliders(&w.collider_set);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
 
@@ -623,6 +1084,36 @@ pub unsafe extern "C" fn sge_phys_ray_cast(
     } else {
         0
     }
+}
+
+/// AABB query. Finds all colliders intersecting the given axis-aligned bounding box.
+/// Fills `out_colliders` with collider handles. Returns count of hits.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_query_aabb(
+    world: *mut c_void,
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
+    out_colliders: *mut u64,
+    max_results: i32,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    let aabb = Aabb::new(point![min_x, min_y], point![max_x, max_y]);
+    let out = slice::from_raw_parts_mut(out_colliders, max_results as usize);
+    let mut count = 0i32;
+
+    w.query_pipeline.colliders_with_aabb_intersecting_aabb(
+        &aabb,
+        |handle| {
+            if count < max_results {
+                out[count as usize] = collider_handle_to_u64(*handle);
+                count += 1;
+            }
+            count < max_results // continue if we have room
+        },
+    );
+    count
 }
 
 /// Point query. Fills `out_bodies` with body handles. Returns count of hits.
