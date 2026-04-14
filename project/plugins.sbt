@@ -7,4 +7,4 @@ ThisBuild / libraryDependencySchemes += "org.scala-lang.modules" %% "scala-xml" 
 
 // multiarch-core Platform model (used in build.sbt for platform definitions)
 resolvers += "Maven Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots/"
-libraryDependencies += "com.kubuszok" %% "multiarch-core" % "a2e683a872fc8fa85cd39003765dd8de794b44b9-SNAPSHOT"
+libraryDependencies += "com.kubuszok" %% "multiarch-core" % "195f84982ac07ba098c29d0bb88968e27dd829fd-SNAPSHOT"
