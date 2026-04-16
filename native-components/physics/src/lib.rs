@@ -976,6 +976,124 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_get_translation(
 }
 
 // ---------------------------------------------------------------------------
+// Rope joint (distance constraint)
+// ---------------------------------------------------------------------------
+
+/// Creates a rope joint constraining two bodies within a maximum distance.
+/// Rapier's rope joint enforces max distance; setting min_dist == max_dist
+/// gives a rigid distance constraint (like Box2D's DistanceJoint).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_create_rope_joint(
+    world: *mut c_void,
+    body1: u64,
+    body2: u64,
+    max_dist: f32,
+) -> u64 {
+    let w = &mut *(world as *mut PhysicsWorld);
+    let joint = RopeJointBuilder::new(max_dist).build();
+    let handle = w.impulse_joint_set.insert(
+        u64_to_body_handle(body1),
+        u64_to_body_handle(body2),
+        joint,
+        true,
+    );
+    joint_handle_to_u64(handle)
+}
+
+/// Sets the maximum allowed distance for a rope joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_rope_joint_set_max_distance(
+    world: *mut c_void,
+    joint: u64,
+    max_dist: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        if let Some(rope) = j.data.as_rope_mut() {
+            rope.set_max_distance(max_dist);
+        }
+    }
+}
+
+/// Gets the maximum allowed distance for a rope joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_rope_joint_get_max_distance(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        if let Some(rope) = j.data.as_rope() {
+            return rope.max_distance();
+        }
+    }
+    0.0
+}
+
+// ---------------------------------------------------------------------------
+// Segment collider (Edge shape — line segment)
+// ---------------------------------------------------------------------------
+
+/// Attaches a segment (line segment) collider to a body. Returns a collider handle.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_create_segment_collider(
+    world: *mut c_void,
+    body: u64,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+) -> u64 {
+    let w = &mut *(world as *mut PhysicsWorld);
+    let collider = ColliderBuilder::segment(point![x1, y1], point![x2, y2]).build();
+    let handle = w.collider_set.insert_with_parent(
+        collider,
+        u64_to_body_handle(body),
+        &mut w.rigid_body_set,
+    );
+    collider_handle_to_u64(handle)
+}
+
+// ---------------------------------------------------------------------------
+// Polyline collider (Chain shape — connected line segments)
+// ---------------------------------------------------------------------------
+
+/// Attaches a polyline collider to a body. Returns a collider handle.
+///
+/// `vertices` is a flat array [x0, y0, x1, y1, ...] of length `vertex_count * 2`.
+/// The polyline consists of segments connecting consecutive vertices.
+/// If `vertex_count` < 2, returns 0 (invalid handle).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_create_polyline_collider(
+    world: *mut c_void,
+    body: u64,
+    vertices: *const f32,
+    vertex_count: i32,
+) -> u64 {
+    if vertex_count < 2 {
+        return 0;
+    }
+    let w = &mut *(world as *mut PhysicsWorld);
+    let verts = slice::from_raw_parts(vertices, (vertex_count * 2) as usize);
+    let points: Vec<Point<Real>> = (0..vertex_count as usize)
+        .map(|i| point![verts[i * 2], verts[i * 2 + 1]])
+        .collect();
+
+    // Build index pairs for consecutive segments
+    let indices: Vec<[u32; 2]> = (0..points.len() as u32 - 1)
+        .map(|i| [i, i + 1])
+        .collect();
+
+    let collider = ColliderBuilder::polyline(points, Some(indices)).build();
+    let handle = w.collider_set.insert_with_parent(
+        collider,
+        u64_to_body_handle(body),
+        &mut w.rigid_body_set,
+    );
+    collider_handle_to_u64(handle)
+}
+
+// ---------------------------------------------------------------------------
 // Body mass/inertia queries
 // ---------------------------------------------------------------------------
 
@@ -1413,6 +1531,86 @@ mod tests {
             sge_phys_body_get_linear_velocity(world, body, vel.as_mut_ptr());
             assert!((vel[0] - 5.0).abs() < 1e-5);
             assert!((vel[1] - (-3.0)).abs() < 1e-5);
+
+            sge_phys_destroy_world(world);
+        }
+    }
+
+    // -- Rope joint --------------------------------------------------------
+
+    // -- Rope joint --------------------------------------------------------
+
+    #[test]
+    fn rope_joint_constrains_distance() {
+        unsafe {
+            let world = sge_phys_create_world(0.0, 0.0);
+
+            let b1 = sge_phys_create_dynamic_body(world, 0.0, 0.0, 0.0);
+            let _c1 = sge_phys_create_box_collider(world, b1, 0.5, 0.5);
+            let b2 = sge_phys_create_dynamic_body(world, 3.0, 0.0, 0.0);
+            let _c2 = sge_phys_create_box_collider(world, b2, 0.5, 0.5);
+
+            let joint = sge_phys_create_rope_joint(world, b1, b2, 5.0);
+
+            let max_dist = sge_phys_rope_joint_get_max_distance(world, joint);
+            assert!((max_dist - 5.0).abs() < 1e-5, "initial max dist should be 5.0, got {}", max_dist);
+
+            sge_phys_rope_joint_set_max_distance(world, joint, 2.0);
+            let max_dist = sge_phys_rope_joint_get_max_distance(world, joint);
+            assert!((max_dist - 2.0).abs() < 1e-5, "updated max dist should be 2.0, got {}", max_dist);
+
+            sge_phys_destroy_world(world);
+        }
+    }
+
+    // -- Segment collider -------------------------------------------------
+
+    #[test]
+    fn segment_collider_raycast() {
+        unsafe {
+            let world = sge_phys_create_world(0.0, 0.0); // no gravity
+            let body = sge_phys_create_static_body(world, 0.0, 0.0, 0.0);
+
+            // Horizontal segment from (-5,0) to (5,0)
+            let _collider = sge_phys_create_segment_collider(world, body, -5.0, 0.0, 5.0, 0.0);
+
+            // Step to update query pipeline
+            sge_phys_world_step(world, 1.0 / 60.0);
+
+            // Cast ray downward — should hit the segment
+            let mut out = [0.0f32; 9];
+            let hit = sge_phys_ray_cast(world, 0.0, 5.0, 0.0, -1.0, 10.0, out.as_mut_ptr());
+            assert_eq!(hit, 1, "ray should hit segment collider");
+            assert!((out[1]).abs() < 0.1, "hit Y should be near 0, got {}", out[1]);
+
+            sge_phys_destroy_world(world);
+        }
+    }
+
+    // -- Polyline collider ------------------------------------------------
+
+    #[test]
+    fn polyline_collider_creation() {
+        unsafe {
+            let world = sge_phys_create_world(0.0, 0.0);
+            let body = sge_phys_create_static_body(world, 0.0, 0.0, 0.0);
+
+            // L-shaped polyline: (0,0) → (5,0) → (5,5)
+            let vertices: [f32; 6] = [0.0, 0.0, 5.0, 0.0, 5.0, 5.0];
+            let _collider = sge_phys_create_polyline_collider(
+                world, body, vertices.as_ptr(), 3
+            );
+
+            // Step and raycast the horizontal segment
+            sge_phys_world_step(world, 1.0 / 60.0);
+
+            let mut out = [0.0f32; 9];
+            let hit = sge_phys_ray_cast(world, 2.5, 5.0, 0.0, -1.0, 10.0, out.as_mut_ptr());
+            assert_eq!(hit, 1, "ray should hit horizontal segment of polyline");
+
+            // Verify minimum vertex count returns 0
+            let invalid = sge_phys_create_polyline_collider(world, body, vertices.as_ptr(), 1);
+            assert_eq!(invalid, 0, "polyline with 1 vertex should return 0");
 
             sge_phys_destroy_world(world);
         }
