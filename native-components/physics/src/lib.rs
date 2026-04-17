@@ -1031,6 +1031,212 @@ pub unsafe extern "C" fn sge_phys_rope_joint_get_max_distance(
 }
 
 // ---------------------------------------------------------------------------
+// Motor joint (controls relative position/angle between two bodies)
+// ---------------------------------------------------------------------------
+
+/// Creates a motor joint between two bodies.
+/// Uses Rapier's GenericJoint with per-axis position motors to control
+/// the relative translation and rotation (maps to Box2D's MotorJoint).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_create_motor_joint(
+    world: *mut c_void,
+    body1: u64,
+    body2: u64,
+) -> u64 {
+    let w = &mut *(world as *mut PhysicsWorld);
+    // Create a generic joint with motors on all 2D axes (X, Y, AngX).
+    // Default: zero offset, moderate stiffness/damping.
+    let mut joint = GenericJointBuilder::new(JointAxesMask::empty()).build();
+    let stiffness = 100.0;
+    let damping   = 20.0;
+    joint.set_motor(JointAxis::LinX,    0.0, 0.0, stiffness, damping);
+    joint.set_motor(JointAxis::LinY,    0.0, 0.0, stiffness, damping);
+    joint.set_motor(JointAxis::AngX, 0.0, 0.0, stiffness, damping);
+    let handle = w.impulse_joint_set.insert(
+        u64_to_body_handle(body1),
+        u64_to_body_handle(body2),
+        joint,
+        true,
+    );
+    joint_handle_to_u64(handle)
+}
+
+/// Sets the target linear offset for a motor joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_motor_joint_set_linear_offset(
+    world: *mut c_void,
+    joint: u64,
+    x: f32,
+    y: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        let sx = j.data.motor(JointAxis::LinX).map(|m| m.stiffness).unwrap_or(100.0);
+        let dx = j.data.motor(JointAxis::LinX).map(|m| m.damping).unwrap_or(20.0);
+        let sy = j.data.motor(JointAxis::LinY).map(|m| m.stiffness).unwrap_or(100.0);
+        let dy = j.data.motor(JointAxis::LinY).map(|m| m.damping).unwrap_or(20.0);
+        j.data.set_motor(JointAxis::LinX, x, 0.0, sx, dx);
+        j.data.set_motor(JointAxis::LinY, y, 0.0, sy, dy);
+    }
+}
+
+/// Gets the target linear offset for a motor joint. Fills `out` with [x, y].
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_motor_joint_get_linear_offset(
+    world: *mut c_void,
+    joint: u64,
+    out: *mut f32,
+) {
+    let w = &*(world as *mut PhysicsWorld);
+    let arr = slice::from_raw_parts_mut(out, 2);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        arr[0] = j.data.motor(JointAxis::LinX).map(|m| m.target_pos).unwrap_or(0.0);
+        arr[1] = j.data.motor(JointAxis::LinY).map(|m| m.target_pos).unwrap_or(0.0);
+    } else {
+        arr[0] = 0.0;
+        arr[1] = 0.0;
+    }
+}
+
+/// Sets the target angular offset for a motor joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_motor_joint_set_angular_offset(
+    world: *mut c_void,
+    joint: u64,
+    angle: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        let s = j.data.motor(JointAxis::AngX).map(|m| m.stiffness).unwrap_or(100.0);
+        let d = j.data.motor(JointAxis::AngX).map(|m| m.damping).unwrap_or(20.0);
+        j.data.set_motor(JointAxis::AngX, angle, 0.0, s, d);
+    }
+}
+
+/// Gets the target angular offset for a motor joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_motor_joint_get_angular_offset(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
+        return j.data.motor(JointAxis::AngX).map(|m| m.target_pos).unwrap_or(0.0);
+    }
+    0.0
+}
+
+/// Sets the maximum linear force for a motor joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_motor_joint_set_max_force(
+    world: *mut c_void,
+    joint: u64,
+    force: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        j.data.set_motor_max_force(JointAxis::LinX, force);
+        j.data.set_motor_max_force(JointAxis::LinY, force);
+    }
+}
+
+/// Sets the maximum angular torque for a motor joint.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_motor_joint_set_max_torque(
+    world: *mut c_void,
+    joint: u64,
+    torque: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        j.data.set_motor_max_force(JointAxis::AngX, torque);
+    }
+}
+
+/// Sets the correction factor (stiffness) for all motor axes.
+/// Higher values make the motor snap to the target faster.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_motor_joint_set_correction_factor(
+    world: *mut c_void,
+    joint: u64,
+    factor: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint)) {
+        // Map correction factor to stiffness; damping = 2 * sqrt(stiffness) for critical damping
+        let stiffness = factor * 100.0;
+        let damping   = 2.0 * stiffness.sqrt();
+        for axis in [JointAxis::LinX, JointAxis::LinY, JointAxis::AngX] {
+            let target = j.data.motor(axis).map(|m| m.target_pos).unwrap_or(0.0);
+            j.data.set_motor(axis, target, 0.0, stiffness, damping);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Contact detail queries
+// ---------------------------------------------------------------------------
+
+/// Gets the number of contact points between two colliders.
+/// Returns 0 if the colliders are not in contact.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_contact_pair_count(
+    world: *mut c_void,
+    collider1: u64,
+    collider2: u64,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    let c1 = u64_to_collider_handle(collider1);
+    let c2 = u64_to_collider_handle(collider2);
+    if let Some(pair) = w.narrow_phase.contact_pair(c1, c2) {
+        pair.manifolds.iter().map(|m| m.points.len() as i32).sum()
+    } else {
+        0
+    }
+}
+
+/// Gets contact details between two colliders.
+///
+/// Fills `out` with `[normalX, normalY, pointX, pointY, penetration]` per contact point
+/// (5 floats each). Points are in world space. Returns the number of points written
+/// (capped at `max_points`).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_contact_pair_points(
+    world: *mut c_void,
+    collider1: u64,
+    collider2: u64,
+    out: *mut f32,
+    max_points: i32,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    let c1 = u64_to_collider_handle(collider1);
+    let c2 = u64_to_collider_handle(collider2);
+
+    let arr = slice::from_raw_parts_mut(out, (max_points * 5) as usize);
+    let mut count = 0i32;
+
+    if let Some(pair) = w.narrow_phase.contact_pair(c1, c2) {
+        // Transform local contact points to world space using collider positions
+        let pos1 = w.collider_set.get(c1).map(|c| *c.position()).unwrap_or(Isometry::identity());
+        for manifold in &pair.manifolds {
+            let normal = manifold.data.normal;
+            for pt in &manifold.points {
+                if count >= max_points { return count; }
+                let idx = (count * 5) as usize;
+                let world_pt = pos1 * pt.local_p1;
+                arr[idx]     = normal.x;
+                arr[idx + 1] = normal.y;
+                arr[idx + 2] = world_pt.x;
+                arr[idx + 3] = world_pt.y;
+                arr[idx + 4] = pt.dist; // negative = penetration
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+// ---------------------------------------------------------------------------
 // Segment collider (Edge shape — line segment)
 // ---------------------------------------------------------------------------
 
@@ -1611,6 +1817,85 @@ mod tests {
             // Verify minimum vertex count returns 0
             let invalid = sge_phys_create_polyline_collider(world, body, vertices.as_ptr(), 1);
             assert_eq!(invalid, 0, "polyline with 1 vertex should return 0");
+
+            sge_phys_destroy_world(world);
+        }
+    }
+
+    // -- Motor joint --------------------------------------------------------
+
+    #[test]
+    fn motor_joint_offset_control() {
+        unsafe {
+            let world = sge_phys_create_world(0.0, 0.0);
+
+            let b1 = sge_phys_create_static_body(world, 0.0, 0.0, 0.0);
+            let _c1 = sge_phys_create_box_collider(world, b1, 0.5, 0.5);
+            let b2 = sge_phys_create_dynamic_body(world, 1.0, 0.0, 0.0);
+            let _c2 = sge_phys_create_box_collider(world, b2, 0.5, 0.5);
+
+            let joint = sge_phys_create_motor_joint(world, b1, b2);
+
+            // Set linear offset
+            sge_phys_motor_joint_set_linear_offset(world, joint, 3.0, 2.0);
+            let mut offset = [0.0f32; 2];
+            sge_phys_motor_joint_get_linear_offset(world, joint, offset.as_mut_ptr());
+            assert!((offset[0] - 3.0).abs() < 1e-5, "x offset should be 3.0, got {}", offset[0]);
+            assert!((offset[1] - 2.0).abs() < 1e-5, "y offset should be 2.0, got {}", offset[1]);
+
+            // Set angular offset
+            sge_phys_motor_joint_set_angular_offset(world, joint, 1.5);
+            let angle = sge_phys_motor_joint_get_angular_offset(world, joint);
+            assert!((angle - 1.5).abs() < 1e-5, "angular offset should be 1.5, got {}", angle);
+
+            sge_phys_destroy_world(world);
+        }
+    }
+
+    // -- Contact details ---------------------------------------------------
+
+    #[test]
+    fn contact_pair_reports_collision() {
+        unsafe {
+            let world = sge_phys_create_world(0.0, -9.81);
+
+            // Create two overlapping boxes
+            let b1 = sge_phys_create_static_body(world, 0.0, 0.0, 0.0);
+            let c1 = sge_phys_create_box_collider(world, b1, 1.0, 1.0);
+            let b2 = sge_phys_create_dynamic_body(world, 0.0, 1.5, 0.0);
+            let c2 = sge_phys_create_box_collider(world, b2, 1.0, 1.0);
+
+            // Step to generate contacts
+            for _ in 0..10 {
+                sge_phys_world_step(world, 1.0 / 60.0);
+            }
+
+            let count = sge_phys_contact_pair_count(world, c1, c2);
+            assert!(count > 0, "should have contact points, got {}", count);
+
+            let mut out = [0.0f32; 10]; // room for 2 points × 5 floats
+            let pts = sge_phys_contact_pair_points(world, c1, c2, out.as_mut_ptr(), 2);
+            assert!(pts > 0, "should return at least 1 contact point, got {}", pts);
+
+            sge_phys_destroy_world(world);
+        }
+    }
+
+    #[test]
+    fn contact_pair_no_collision() {
+        unsafe {
+            let world = sge_phys_create_world(0.0, 0.0);
+
+            // Two boxes far apart — no contact
+            let b1 = sge_phys_create_static_body(world, 0.0, 0.0, 0.0);
+            let c1 = sge_phys_create_box_collider(world, b1, 0.5, 0.5);
+            let b2 = sge_phys_create_static_body(world, 100.0, 0.0, 0.0);
+            let c2 = sge_phys_create_box_collider(world, b2, 0.5, 0.5);
+
+            sge_phys_world_step(world, 1.0 / 60.0);
+
+            let count = sge_phys_contact_pair_count(world, c1, c2);
+            assert_eq!(count, 0, "should have no contacts");
 
             sge_phys_destroy_world(world);
         }
