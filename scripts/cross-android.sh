@@ -55,6 +55,17 @@ ANDROID_TARGETS=(
   "x86_64-linux-android:android-x86_64"
 )
 
+# Profile selection (same as cross-all.sh)
+if [ "${SGE_RELEASE:-}" = "true" ]; then
+  CARGO_PROFILE="--release"
+  PROFILE_DIR="release"
+  echo "=== Release build (optimized) ==="
+else
+  CARGO_PROFILE="--profile ci"
+  PROFILE_DIR="ci"
+  echo "=== CI build (fast, unoptimized) ==="
+fi
+
 echo "=== Building 3 Android targets ==="
 
 for entry in "${ANDROID_TARGETS[@]}"; do
@@ -63,15 +74,15 @@ for entry in "${ANDROID_TARGETS[@]}"; do
   echo "--- $classifier ($rust_target) ---"
 
   # Android: build all workspace members (no GLFW — handled by build.rs)
-  cargo build --release --target "$rust_target" \
+  cargo build $CARGO_PROFILE --target "$rust_target" \
     --manifest-path "$NATIVE_DIR/Cargo.toml"
 
   # Collect
-  src_dir="$NATIVE_DIR/target/$rust_target/release"
+  src_dir="$NATIVE_DIR/target/$rust_target/$PROFILE_DIR"
   dest_dir="$NATIVE_DIR/target/cross/$classifier"
   mkdir -p "$dest_dir"
 
-  for f in libsge_native_ops.so libsge_audio.so libsge_freetype.so libsge_physics.so; do
+  for f in libsge_native_ops.so libsge_audio.so libsge_freetype.so libsge_physics.so libsge_physics3d.so; do
     [ -f "$src_dir/$f" ] && cp "$src_dir/$f" "$dest_dir/"
   done
 

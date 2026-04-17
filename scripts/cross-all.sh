@@ -11,6 +11,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NATIVE_DIR="$SCRIPT_DIR/../native-components"
 CROSS_DIR="$NATIVE_DIR/target/cross"
 
+# Profile selection:
+#   SGE_RELEASE=true  → --release (opt-level=3, lto=thin) for tagged releases
+#   default           → --profile ci (opt-level=1, lto=false) for fast snapshot builds
+if [ "${SGE_RELEASE:-}" = "true" ]; then
+  CARGO_PROFILE="--release"
+  PROFILE_DIR="release"
+  echo "=== Release build (optimized) ==="
+else
+  CARGO_PROFILE="--profile ci"
+  PROFILE_DIR="ci"
+  echo "=== CI build (fast, unoptimized) ==="
+fi
+
 DESKTOP_TARGETS=(
   "x86_64-apple-darwin:macos-x86_64"
   "aarch64-apple-darwin:macos-aarch64"
@@ -29,14 +42,14 @@ for entry in "${DESKTOP_TARGETS[@]}"; do
 
   case "$rust_target" in
     *-apple-darwin)
-      cargo build --release --target "$rust_target" --manifest-path "$NATIVE_DIR/Cargo.toml"
+      cargo build $CARGO_PROFILE --target "$rust_target" --manifest-path "$NATIVE_DIR/Cargo.toml"
       ;;
     *-linux-gnu)
-      cargo zigbuild --release --target "$rust_target" --manifest-path "$NATIVE_DIR/Cargo.toml"
+      cargo zigbuild $CARGO_PROFILE --target "$rust_target" --manifest-path "$NATIVE_DIR/Cargo.toml"
       ;;
     *-windows-msvc)
       # cargo-xwin provides Windows SDK headers (zig doesn't have setjmp.h etc.)
-      cargo xwin build --release --target "$rust_target" --manifest-path "$NATIVE_DIR/Cargo.toml"
+      cargo xwin build $CARGO_PROFILE --target "$rust_target" --manifest-path "$NATIVE_DIR/Cargo.toml"
       ;;
   esac
 done
@@ -49,7 +62,7 @@ rm -rf "$CROSS_DIR"
 
 for entry in "${DESKTOP_TARGETS[@]}"; do
   IFS=: read -r rust_target classifier <<< "$entry"
-  src_dir="$NATIVE_DIR/target/$rust_target/release"
+  src_dir="$NATIVE_DIR/target/$rust_target/$PROFILE_DIR"
   dest_dir="$CROSS_DIR/$classifier"
   mkdir -p "$dest_dir"
 
@@ -65,9 +78,10 @@ for entry in "${DESKTOP_TARGETS[@]}"; do
     [ -f "$src_dir/$f" ] && cp "$src_dir/$f" "$dest_dir/"
   done
 
-  # FreeType and physics libraries (from workspace member crates)
+  # FreeType, physics, and physics3d libraries (from workspace member crates)
   for f in libsge_freetype.a libsge_freetype.dylib libsge_freetype.so sge_freetype.dll sge_freetype.dll.lib \
-           libsge_physics.a libsge_physics.dylib libsge_physics.so sge_physics.dll sge_physics.dll.lib; do
+           libsge_physics.a libsge_physics.dylib libsge_physics.so sge_physics.dll sge_physics.dll.lib \
+           libsge_physics3d.a libsge_physics3d.dylib libsge_physics3d.so sge_physics3d.dll sge_physics3d.dll.lib; do
     [ -f "$src_dir/$f" ] && cp "$src_dir/$f" "$dest_dir/"
   done
 
@@ -79,7 +93,7 @@ for entry in "${DESKTOP_TARGETS[@]}"; do
     cp "/opt/homebrew/opt/freetype/lib/libfreetype.a" "$dest_dir/libfreetype.a"
   else
     # Find libfreetype2.a in Cargo's build output (hash in path varies)
-    ft_archive=$(find "$NATIVE_DIR/target/$rust_target/release/build" -path "*/freetype-sys-*/out/libfreetype2.a" 2>/dev/null | head -1)
+    ft_archive=$(find "$NATIVE_DIR/target/$rust_target/$PROFILE_DIR/build" -path "*/freetype-sys-*/out/libfreetype2.a" 2>/dev/null | head -1)
     if [ -n "$ft_archive" ]; then
       cp "$ft_archive" "$dest_dir/libfreetype.a"
     fi

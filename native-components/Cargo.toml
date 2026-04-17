@@ -13,6 +13,15 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 
+# Snapshot builds: fast compile, correct behavior, suitable for CI verification.
+# Use: cargo build --profile ci
+[profile.ci]
+inherits = "release"
+opt-level = 1
+lto = false
+
+# Tagged release builds: fully optimized for distribution.
+# Use: cargo build --release
 [profile.release]
 opt-level = 3
-lto = true
+lto = "thin"
