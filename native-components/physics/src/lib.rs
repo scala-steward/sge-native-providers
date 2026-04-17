@@ -9,6 +9,7 @@
 // as an opaque *mut c_void handle. Body/collider/joint handles are Rapier's
 // internal indices encoded as u64.
 
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::slice;
 use std::sync::mpsc;
@@ -35,6 +36,10 @@ struct PhysicsWorld {
     // Contact event buffers
     contact_start_buf: Vec<(u64, u64)>,
     contact_stop_buf: Vec<(u64, u64)>,
+    // Contact force event buffer: (collider1, collider2, total_force_magnitude)
+    contact_force_buf: Vec<(u64, u64, f32)>,
+    // Per-collider one-way platform config: collider_handle_u64 -> (allowed_local_n1, allowed_angle)
+    one_way_platforms: HashMap<u64, ([f32; 2], f32)>,
 }
 
 impl PhysicsWorld {
@@ -53,20 +58,27 @@ impl PhysicsWorld {
             ccd_solver: CCDSolver::new(),
             contact_start_buf: Vec::new(),
             contact_stop_buf: Vec::new(),
+            contact_force_buf: Vec::new(),
+            one_way_platforms: HashMap::new(),
         }
     }
 
     fn step(&mut self, dt: f32) {
         self.integration_parameters.dt = dt;
 
-        // Collect contact events before stepping
+        // Clear event buffers before stepping
         self.contact_start_buf.clear();
         self.contact_stop_buf.clear();
+        self.contact_force_buf.clear();
 
         let (contact_send, contact_recv) = mpsc::channel();
-        let (force_send, _force_recv) = mpsc::channel();
+        let (force_send, force_recv) = mpsc::channel();
 
         let event_handler = ChannelEventCollector::new(contact_send, force_send);
+
+        // Temporarily take the one-way platforms map to avoid borrow conflict with self
+        let owp = std::mem::take(&mut self.one_way_platforms);
+        let hooks = SgePhysicsHooks2D { one_way_platforms: &owp };
 
         self.physics_pipeline.step(
             self.gravity,
@@ -79,9 +91,12 @@ impl PhysicsWorld {
             &mut self.impulse_joint_set,
             &mut self.multibody_joint_set,
             &mut self.ccd_solver,
-            &(),
+            &hooks,
             &event_handler,
         );
+
+        // Restore the one-way platforms map
+        self.one_way_platforms = owp;
 
         // Drain collision events
         while let Ok(event) = contact_recv.try_recv() {
@@ -99,6 +114,47 @@ impl PhysicsWorld {
                     ));
                 }
             }
+        }
+
+        // Drain force events
+        while let Ok(event) = force_recv.try_recv() {
+            self.contact_force_buf.push((
+                collider_handle_to_u64(event.collider1),
+                collider_handle_to_u64(event.collider2),
+                event.total_force_magnitude,
+            ));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Physics hooks — one-way platform support (2D)
+// ---------------------------------------------------------------------------
+
+struct SgePhysicsHooks2D<'a> {
+    one_way_platforms: &'a HashMap<u64, ([f32; 2], f32)>,
+}
+
+unsafe impl Send for SgePhysicsHooks2D<'_> {}
+unsafe impl Sync for SgePhysicsHooks2D<'_> {}
+
+impl PhysicsHooks for SgePhysicsHooks2D<'_> {
+    fn modify_solver_contacts(&self, context: &mut ContactModificationContext) {
+        let c1 = collider_handle_to_u64(context.collider1);
+        let c2 = collider_handle_to_u64(context.collider2);
+
+        if let Some(&(dir, angle)) = self.one_way_platforms.get(&c1) {
+            let allowed_local_n1 = Vector::new(dir[0], dir[1]);
+            context.update_as_oneway_platform(allowed_local_n1, angle);
+        }
+        if let Some(&(dir, angle)) = self.one_way_platforms.get(&c2) {
+            // For collider2, the normal points outward from collider1, so we
+            // need to flip it. Rapier's update_as_oneway_platform uses
+            // manifold.local_n1 which is relative to collider1. For collider2
+            // as the platform, we negate the allowed direction so the dot
+            // product check works correctly.
+            let allowed_local_n1 = Vector::new(-dir[0], -dir[1]);
+            context.update_as_oneway_platform(allowed_local_n1, angle);
         }
     }
 }
@@ -2325,6 +2381,132 @@ pub unsafe extern "C" fn sge_phys_intersect_shape(
         count += 1;
     }
     count
+}
+
+// ---------------------------------------------------------------------------
+// Contact force events (polling)
+// ---------------------------------------------------------------------------
+
+/// Polls contact force events since the last step.
+/// Fills out_collider1, out_collider2, and out_force arrays.
+/// Returns the event count (capped at max_events).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_poll_contact_force_events(
+    world: *mut c_void,
+    out_collider1: *mut u64,
+    out_collider2: *mut u64,
+    out_force: *mut f32,
+    max_events: i32,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    let c1 = slice::from_raw_parts_mut(out_collider1, max_events as usize);
+    let c2 = slice::from_raw_parts_mut(out_collider2, max_events as usize);
+    let forces = slice::from_raw_parts_mut(out_force, max_events as usize);
+    let count = w.contact_force_buf.len().min(max_events as usize);
+    for i in 0..count {
+        c1[i] = w.contact_force_buf[i].0;
+        c2[i] = w.contact_force_buf[i].1;
+        forces[i] = w.contact_force_buf[i].2;
+    }
+    count as i32
+}
+
+// ---------------------------------------------------------------------------
+// Collider — contact force event threshold
+// ---------------------------------------------------------------------------
+
+/// Sets the contact force event threshold for a collider.
+/// Force events are only generated when total force exceeds this threshold.
+/// Requires ActiveEvents::CONTACT_FORCE_EVENTS to be set on the collider.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_set_contact_force_event_threshold(
+    world: *mut c_void, collider: u64, threshold: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
+        c.set_contact_force_event_threshold(threshold);
+    }
+}
+
+/// Gets the contact force event threshold for a collider.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_get_contact_force_event_threshold(
+    world: *mut c_void, collider: u64,
+) -> f32 {
+    let w = &*(world as *mut PhysicsWorld);
+    w.collider_set.get(u64_to_collider_handle(collider))
+        .map(|c| c.contact_force_event_threshold())
+        .unwrap_or(0.0)
+}
+
+// ---------------------------------------------------------------------------
+// Collider — active hooks
+// ---------------------------------------------------------------------------
+
+/// Sets the active hooks flags for a collider (bitmask of ActiveHooks bits).
+/// Bit 0x01 = FILTER_CONTACT_PAIRS
+/// Bit 0x02 = FILTER_INTERSECTION_PAIR
+/// Bit 0x04 = MODIFY_SOLVER_CONTACTS (required for one-way platforms)
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_set_active_hooks(
+    world: *mut c_void, collider: u64, flags: i32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
+        c.set_active_hooks(ActiveHooks::from_bits_truncate(flags as u32));
+    }
+}
+
+/// Gets the active hooks flags for a collider.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_get_active_hooks(
+    world: *mut c_void, collider: u64,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    w.collider_set.get(u64_to_collider_handle(collider))
+        .map(|c| c.active_hooks().bits() as i32)
+        .unwrap_or(0)
+}
+
+// ---------------------------------------------------------------------------
+// Collider — one-way platform
+// ---------------------------------------------------------------------------
+
+/// Marks a collider as a one-way platform. Contacts with this collider are
+/// only kept if the contact normal aligns with the given direction.
+/// The allowed_angle (radians) controls the tolerance cone around the direction.
+/// Set nx=0, ny=0 to disable one-way behavior for this collider.
+///
+/// Requires ActiveHooks::MODIFY_SOLVER_CONTACTS (0x04) to be set on the collider
+/// via sge_phys_collider_set_active_hooks.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_set_one_way_direction(
+    world: *mut c_void, collider: u64, nx: f32, ny: f32, allowed_angle: f32,
+) {
+    let w = &mut *(world as *mut PhysicsWorld);
+    if nx == 0.0 && ny == 0.0 {
+        w.one_way_platforms.remove(&collider);
+    } else {
+        w.one_way_platforms.insert(collider, ([nx, ny], allowed_angle));
+    }
+}
+
+/// Returns 1 if the collider has one-way platform behavior, 0 otherwise.
+/// If it does, fills out_nx, out_ny, out_angle with the configured direction and angle.
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_collider_get_one_way_direction(
+    world: *mut c_void, collider: u64,
+    out_nx: *mut f32, out_ny: *mut f32, out_angle: *mut f32,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    if let Some(&(dir, angle)) = w.one_way_platforms.get(&collider) {
+        *out_nx = dir[0];
+        *out_ny = dir[1];
+        *out_angle = angle;
+        1
+    } else {
+        0
+    }
 }
 
 // ---------------------------------------------------------------------------
