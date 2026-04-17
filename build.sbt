@@ -96,6 +96,9 @@ lazy val root = project
     `sn-provider-sge-physics`,
     `pnm-provider-sge-physics-desktop`,
     `pnm-provider-sge-physics-android`,
+    `sn-provider-sge-physics3d`,
+    `pnm-provider-sge-physics3d-desktop`,
+    `pnm-provider-sge-physics3d-android`,
     `sn-provider-sge-angle`,
     `pnm-provider-sge-angle`
   )
@@ -244,6 +247,47 @@ lazy val `pnm-provider-sge-physics-android` = project
     Compile / packageBin / mappings ++= {
       val base = (ThisBuild / baseDirectory).value / "native-components" / "target"
       val libs = Set("libsge_physics.so")
+      androidJarMappings(base, Platform.android, libs.contains)
+    }
+  )
+
+// ── Physics3D (sge_physics3d via Rapier3D) ───────────────────────────
+
+lazy val `sn-provider-sge-physics3d` = project
+  .in(file("providers/sn-provider-sge-physics3d"))
+  .settings(publishSettings *)
+  .settings(providerSettings *)
+  .settings(
+    name := "sn-provider-sge-physics3d",
+    Compile / packageBin / mappings ++= {
+      val cross = crossDir.value
+      val libs = Set("libsge_physics3d.a", "sge_physics3d.lib")
+      fatJarMappings(cross, Platform.desktop, libs.contains)
+    }
+  )
+
+lazy val `pnm-provider-sge-physics3d-desktop` = project
+  .in(file("providers/pnm-provider-sge-physics3d-desktop"))
+  .settings(publishSettings *)
+  .settings(providerSettings *)
+  .settings(
+    name := "pnm-provider-sge-physics3d-desktop",
+    Compile / packageBin / mappings ++= {
+      val cross = crossDir.value
+      val libs = Set("libsge_physics3d.dylib", "libsge_physics3d.so", "sge_physics3d.dll")
+      fatJarMappings(cross, Platform.desktop, libs.contains)
+    }
+  )
+
+lazy val `pnm-provider-sge-physics3d-android` = project
+  .in(file("providers/pnm-provider-sge-physics3d-android"))
+  .settings(publishSettings *)
+  .settings(providerSettings *)
+  .settings(
+    name := "pnm-provider-sge-physics3d-android",
+    Compile / packageBin / mappings ++= {
+      val base = (ThisBuild / baseDirectory).value / "native-components" / "target"
+      val libs = Set("libsge_physics3d.so")
       androidJarMappings(base, Platform.android, libs.contains)
     }
   )

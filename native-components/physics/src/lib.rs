@@ -2282,6 +2282,52 @@ pub unsafe extern "C" fn sge_phys_world_set_num_internal_pgs_iterations(world: *
 }
 
 // ---------------------------------------------------------------------------
+// Queries — shape intersection
+// ---------------------------------------------------------------------------
+
+/// Tests if a shape at a given position overlaps any collider.
+/// `shape_type`: 0=circle, 1=box, 2=capsule. `shape_params` depends on type:
+///   circle: [radius], box: [halfWidth, halfHeight], capsule: [halfHeight, radius]
+/// Fills `out_colliders` with collider handles. Returns the count (capped at `max_results`).
+#[no_mangle]
+pub unsafe extern "C" fn sge_phys_intersect_shape(
+    world: *mut c_void,
+    shape_type: i32, shape_params: *const f32,
+    pos_x: f32, pos_y: f32, angle: f32,
+    out_colliders: *mut u64, max_results: i32,
+) -> i32 {
+    let w = &*(world as *mut PhysicsWorld);
+    let params = slice::from_raw_parts(shape_params, 2);
+
+    let shape: Box<dyn Shape> = match shape_type {
+        0 => Box::new(Ball::new(params[0])),
+        1 => Box::new(Cuboid::new(Vector::new(params[0], params[1]))),
+        2 => Box::new(Capsule::new_y(params[0], params[1])),
+        _ => return 0,
+    };
+
+    let pos = Pose::new(Vector::new(pos_x, pos_y), angle);
+    let arr = slice::from_raw_parts_mut(out_colliders, max_results as usize);
+    let mut count = 0i32;
+
+    let query_pipeline = w.broad_phase.as_query_pipeline(
+        &DefaultQueryDispatcher,
+        &w.rigid_body_set,
+        &w.collider_set,
+        QueryFilter::default(),
+    );
+
+    for (handle, _collider) in query_pipeline.intersect_shape(
+        pos, shape.as_ref(),
+    ) {
+        if count >= max_results { break; }
+        arr[count as usize] = collider_handle_to_u64(handle);
+        count += 1;
+    }
+    count
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
