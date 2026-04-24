@@ -224,6 +224,11 @@ jobs:
           for plat in macos-x86_64 macos-aarch64; do
             verify_jar "$SN_ANGLE_JAR" "native/$plat/libEGL.dylib" "native/$plat/libGLESv2.dylib"
           done
+          for plat in windows-x86_64 windows-aarch64; do
+            verify_jar "$SN_ANGLE_JAR" \
+              "native/$plat/libEGL.dll" "native/$plat/libGLESv2.dll" \
+              "native/$plat/EGL.lib" "native/$plat/GLESv2.lib"
+          done
 
           # Panama ANGLE: same shared libs
           PNM_ANGLE_JAR=$(ls providers/pnm-provider-sge-angle/target/*.jar)

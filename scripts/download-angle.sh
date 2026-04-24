@@ -53,10 +53,12 @@ for platform in $PLATFORMS; do
   # Find and copy libEGL and libGLESv2 (recursively, archives may have subdirs)
   find "$tmp_dir" -name "libEGL.$ext" -exec cp {} "$dest_dir/" \; 2>/dev/null
   find "$tmp_dir" -name "libGLESv2.$ext" -exec cp {} "$dest_dir/" \; 2>/dev/null
-  # Windows uses different names
+  # Windows: also copy import libraries (.dll.lib) and rename to match sn-provider.json
   if [ "$ext" = "dll" ]; then
     find "$tmp_dir" -name "libEGL.dll" -exec cp {} "$dest_dir/" \; 2>/dev/null
-    find "$tmp_dir" -name "GLESv2.dll" -exec cp {} "$dest_dir/" \; 2>/dev/null
+    find "$tmp_dir" -name "libGLESv2.dll" -exec cp {} "$dest_dir/" \; 2>/dev/null
+    find "$tmp_dir" -name "libEGL.dll.lib" -exec cp {} "$dest_dir/EGL.lib" \; 2>/dev/null
+    find "$tmp_dir" -name "libGLESv2.dll.lib" -exec cp {} "$dest_dir/GLESv2.lib" \; 2>/dev/null
   fi
 
   echo "  Installed: $(ls "$dest_dir"/*EGL* "$dest_dir"/*GLESv2* "$dest_dir"/*GLES* 2>/dev/null | wc -l | tr -d ' ') ANGLE libs"

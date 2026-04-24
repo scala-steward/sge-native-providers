@@ -128,8 +128,8 @@ lazy val `sn-provider-sge` = project
         "libsge_native_ops.a", "sge_native_ops.lib",
         "libsge_audio.a",
         "libglfw3.a",
-        // Windows companion .lib stubs (merged into sge_native_ops.dll)
-        "sge_audio.lib", "glfw3.lib", "glfw.lib", "EGL.lib", "GLESv2.lib",
+        // Windows companion .lib stubs
+        "sge_audio.lib", "glfw3.lib", "glfw.lib",
         // libobjc stubs for Linux/Windows (for @link("objc") in Scala Native)
         "libobjc.a", "objc.lib"
       )
@@ -304,7 +304,9 @@ lazy val `sn-provider-sge-angle` = project
       val cross = crossDir.value
       val libs = Set(
         "libEGL.dylib", "libEGL.so", "libEGL.dll",
-        "libGLESv2.dylib", "libGLESv2.so", "GLESv2.dll"
+        "libGLESv2.dylib", "libGLESv2.so", "libGLESv2.dll",
+        // Windows import libraries (renamed from .dll.lib by download-angle.sh)
+        "EGL.lib", "GLESv2.lib"
       )
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
@@ -320,7 +322,9 @@ lazy val `pnm-provider-sge-angle` = project
       val cross = crossDir.value
       val libs = Set(
         "libEGL.dylib", "libEGL.so", "libEGL.dll",
-        "libGLESv2.dylib", "libGLESv2.so", "GLESv2.dll"
+        "libGLESv2.dylib", "libGLESv2.so", "libGLESv2.dll",
+        // Windows import libraries (renamed from .dll.lib by download-angle.sh)
+        "EGL.lib", "GLESv2.lib"
       )
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
