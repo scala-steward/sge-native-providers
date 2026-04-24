@@ -158,6 +158,9 @@ jobs:
           for plat in linux-x86_64 linux-aarch64; do
             verify_jar "$SN_CORE_JAR" "native/$plat/libobjc.a"
           done
+          for plat in windows-x86_64 windows-aarch64; do
+            verify_jar "$SN_CORE_JAR" "native/$plat/objc.lib"
+          done
           verify_jar "$SN_CORE_JAR" "sn-provider.json"
 
           # Panama SGE core (desktop): must have shared libs for all platforms

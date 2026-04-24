@@ -130,8 +130,8 @@ lazy val `sn-provider-sge` = project
         "libglfw3.a",
         // Windows companion .lib stubs (merged into sge_native_ops.dll)
         "sge_audio.lib", "glfw3.lib", "glfw.lib", "EGL.lib", "GLESv2.lib",
-        // Linux libobjc stub (for @link("objc") in Scala Native)
-        "libobjc.a"
+        // libobjc stubs for Linux/Windows (for @link("objc") in Scala Native)
+        "libobjc.a", "objc.lib"
       )
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }

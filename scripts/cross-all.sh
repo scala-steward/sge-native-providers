@@ -113,7 +113,8 @@ for classifier in windows-x86_64 windows-aarch64; do
   fi
 done
 
-# Generate libobjc stub for Linux (needed for @link("objc") in Scala Native)
+# Generate libobjc stub for Linux and Windows (needed for @link("objc") in Scala Native)
+# On macOS the system libobjc is used; on Linux/Windows these stubs satisfy the linker.
 for classifier in linux-x86_64 linux-aarch64; do
   dest_dir="$CROSS_DIR/$classifier"
   if [ ! -f "$dest_dir/libobjc.a" ]; then
@@ -129,6 +130,22 @@ for classifier in linux-x86_64 linux-aarch64; do
     zig ar rcs "$dest_dir/libobjc.a" "$STUB_O"
     rm -f "$STUB_C" "$STUB_O"
     echo "  Generated libobjc.a stub for $classifier"
+  fi
+done
+for classifier in windows-x86_64 windows-aarch64; do
+  dest_dir="$CROSS_DIR/$classifier"
+  if [ ! -f "$dest_dir/objc.lib" ]; then
+    STUB_C=$(mktemp /tmp/objc_stub.XXXXXX.c)
+    printf 'void *sel_registerName(const char *s) { return (void*)0; }\nvoid *objc_msgSend(void *self, void *sel, ...) { return (void*)0; }\nvoid *objc_getClass(const char *name) { return (void*)0; }\n' > "$STUB_C"
+    case "$classifier" in
+      windows-x86_64)  ZIG_TARGET="x86_64-windows-msvc" ;;
+      windows-aarch64) ZIG_TARGET="aarch64-windows-msvc" ;;
+    esac
+    STUB_O="${STUB_C%.c}.obj"
+    zig cc -target "$ZIG_TARGET" -c "$STUB_C" -o "$STUB_O"
+    zig ar rcs "$dest_dir/objc.lib" "$STUB_O"
+    rm -f "$STUB_C" "$STUB_O"
+    echo "  Generated objc.lib stub for $classifier"
   fi
 done
 
