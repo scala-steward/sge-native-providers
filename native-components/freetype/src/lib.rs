@@ -62,10 +62,7 @@ extern "C" {
         origin: *const ft::FT_Vector,
         destroy: ft::FT_Bool,
     ) -> ft::FT_Error;
-    fn FT_Stroker_New(
-        library: ft::FT_Library,
-        astroker: *mut FT_Stroker,
-    ) -> ft::FT_Error;
+    fn FT_Stroker_New(library: ft::FT_Library, astroker: *mut FT_Stroker) -> ft::FT_Error;
     fn FT_Stroker_Set(
         stroker: FT_Stroker,
         radius: ft::FT_Fixed,
@@ -484,10 +481,7 @@ pub unsafe extern "C" fn sge_ft_get_size_metrics(face: *mut c_void, out: *mut i3
 #[no_mangle]
 pub unsafe extern "C" fn sge_ft_stroker_new(library: *mut c_void) -> *mut c_void {
     let mut stroker: FT_Stroker = ptr::null_mut();
-    if ft_ok(FT_Stroker_New(
-        library as ft::FT_Library,
-        &mut stroker,
-    )) {
+    if ft_ok(FT_Stroker_New(library as ft::FT_Library, &mut stroker)) {
         stroker
     } else {
         ptr::null_mut()
@@ -526,10 +520,7 @@ pub unsafe extern "C" fn sge_ft_stroker_done(stroker: *mut c_void) {
 #[no_mangle]
 pub unsafe extern "C" fn sge_ft_get_glyph(glyph_slot: *mut c_void) -> *mut c_void {
     let mut glyph: FT_Glyph = ptr::null_mut();
-    if ft_ok(FT_Get_Glyph(
-        glyph_slot as ft::FT_GlyphSlot,
-        &mut glyph,
-    )) {
+    if ft_ok(FT_Get_Glyph(glyph_slot as ft::FT_GlyphSlot, &mut glyph)) {
         glyph as *mut c_void
     } else {
         ptr::null_mut()
@@ -662,7 +653,11 @@ mod tests {
             let garbage = [0u8; 64];
             let face = sge_ft_new_memory_face(lib, garbage.as_ptr(), garbage.len() as i32, 0);
             assert!(face.is_null(), "Invalid font data should return null face");
-            assert_ne!(sge_ft_get_last_error_code(), 0, "Should have error after invalid face");
+            assert_ne!(
+                sge_ft_get_last_error_code(),
+                0,
+                "Should have error after invalid face"
+            );
 
             sge_ft_done_freetype(lib);
         }

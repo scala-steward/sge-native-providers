@@ -23,7 +23,10 @@ fn main() {
 
     // Vendor directory is at the workspace root level (sibling to this crate's dir)
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let vendor_dir = std::path::Path::new(&manifest_dir).parent().unwrap().join("vendor");
+    let vendor_dir = std::path::Path::new(&manifest_dir)
+        .parent()
+        .unwrap()
+        .join("vendor");
     let vendor = vendor_dir.to_str().unwrap().to_string();
 
     // Determine the final output directory (where libsge_native_ops will be placed).
@@ -37,8 +40,15 @@ fn main() {
         let out = std::path::Path::new(&out_dir);
         // OUT_DIR = .../target[/<triple>]/<profile>/build/<pkg>/out
         // Go up 3 levels: out -> <pkg> -> build -> <profile>
-        out.parent().unwrap().parent().unwrap().parent().unwrap()
-            .to_str().unwrap().to_string()
+        out.parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
     };
 
     let skip_c_libs = std::env::var("SGE_SKIP_C_LIBS").unwrap_or_default() == "1";
@@ -120,9 +130,19 @@ fn build_glfw_merged(vendor: &str, target_os: &str, target_env: &str) {
 
     // Common sources
     for f in &[
-        "context.c", "init.c", "input.c", "monitor.c", "platform.c",
-        "vulkan.c", "window.c", "egl_context.c", "osmesa_context.c",
-        "null_init.c", "null_monitor.c", "null_window.c", "null_joystick.c",
+        "context.c",
+        "init.c",
+        "input.c",
+        "monitor.c",
+        "platform.c",
+        "vulkan.c",
+        "window.c",
+        "egl_context.c",
+        "osmesa_context.c",
+        "null_init.c",
+        "null_monitor.c",
+        "null_window.c",
+        "null_joystick.c",
     ] {
         build.file(format!("{}/{}", glfw_src, f));
     }
@@ -135,9 +155,14 @@ fn build_glfw_merged(vendor: &str, target_os: &str, target_env: &str) {
             build.define("WINVER", Some("0x0501"));
         }
         for f in &[
-            "win32_init.c", "win32_joystick.c", "win32_monitor.c",
-            "win32_window.c", "wgl_context.c",
-            "win32_module.c", "win32_time.c", "win32_thread.c",
+            "win32_init.c",
+            "win32_joystick.c",
+            "win32_monitor.c",
+            "win32_window.c",
+            "wgl_context.c",
+            "win32_module.c",
+            "win32_time.c",
+            "win32_thread.c",
         ] {
             build.file(format!("{}/{}", glfw_src, f));
         }
@@ -176,10 +201,14 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
                 "-dynamiclib".into(),
                 "-Wl,-all_load".into(),
                 archive.clone(),
-                "-framework".into(), "AudioToolbox".into(),
-                "-framework".into(), "CoreAudio".into(),
-                "-framework".into(), "CoreFoundation".into(),
-                "-install_name".into(), "@rpath/libsge_audio.dylib".into(),
+                "-framework".into(),
+                "AudioToolbox".into(),
+                "-framework".into(),
+                "CoreAudio".into(),
+                "-framework".into(),
+                "CoreFoundation".into(),
+                "-install_name".into(),
+                "@rpath/libsge_audio.dylib".into(),
             ],
         ),
         "windows" => {
@@ -191,7 +220,11 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
             let is_cross = target != host && !target.is_empty();
             if is_cross {
                 let dll_output = format!("{}/sge_audio.dll", release_dir);
-                let arch = if target.contains("aarch64") { "arm64" } else { "x86_64" };
+                let arch = if target.contains("aarch64") {
+                    "arm64"
+                } else {
+                    "x86_64"
+                };
                 // Find xwin cache dir (cargo-xwin downloads Windows SDK here)
                 let home = std::env::var("HOME").unwrap_or_default();
                 let xwin_cache = format!("{}/.cache/cargo-xwin/xwin", home);
@@ -201,7 +234,11 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
                 } else {
                     format!("{}/Library/Caches/cargo-xwin/xwin", home)
                 };
-                let machine = if target.contains("aarch64") { "/machine:arm64x" } else { "/machine:x64" };
+                let machine = if target.contains("aarch64") {
+                    "/machine:arm64x"
+                } else {
+                    "/machine:x64"
+                };
                 let status = lld_link_command()
                     .arg("/dll")
                     .arg("/force:multiple")
@@ -212,8 +249,14 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
                     .arg(format!("/libpath:{}/crt/lib/{}", xwin_dir, arch))
                     .arg(format!("/libpath:{}/sdk/lib/um/{}", xwin_dir, arch))
                     .arg(format!("/libpath:{}/sdk/lib/ucrt/{}", xwin_dir, arch))
-                    .args(["kernel32.lib", "ucrt.lib", "vcruntime.lib", "ole32.lib",
-                            "user32.lib", "advapi32.lib"])
+                    .args([
+                        "kernel32.lib",
+                        "ucrt.lib",
+                        "vcruntime.lib",
+                        "ole32.lib",
+                        "user32.lib",
+                        "advapi32.lib",
+                    ])
                     .status()
                     .unwrap_or_else(|e| panic!("Failed to link sge_audio.dll: {}", e));
                 assert!(status.success(), "Failed to link sge_audio.dll");
@@ -229,7 +272,7 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
                     "-Wl,--no-whole-archive".into(),
                 ],
             )
-        },
+        }
         "android" => (
             "libsge_audio.so",
             vec![
@@ -269,7 +312,13 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
 
 /// Compile GLFW from vendored source as a static archive, then link it into a
 /// separate shared library (libglfw) placed in the release directory.
-fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: &str, target_env: &str) {
+fn build_glfw_shared(
+    vendor: &str,
+    out_dir: &str,
+    release_dir: &str,
+    target_os: &str,
+    target_env: &str,
+) {
     let glfw_src = format!("{}/glfw/src", vendor);
     let glfw_include = format!("{}/glfw/include", vendor);
 
@@ -283,9 +332,19 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
 
     // Common sources (all platforms)
     for f in &[
-        "context.c", "init.c", "input.c", "monitor.c", "platform.c",
-        "vulkan.c", "window.c", "egl_context.c", "osmesa_context.c",
-        "null_init.c", "null_monitor.c", "null_window.c", "null_joystick.c",
+        "context.c",
+        "init.c",
+        "input.c",
+        "monitor.c",
+        "platform.c",
+        "vulkan.c",
+        "window.c",
+        "egl_context.c",
+        "osmesa_context.c",
+        "null_init.c",
+        "null_monitor.c",
+        "null_window.c",
+        "null_joystick.c",
     ] {
         build.file(format!("{}/{}", glfw_src, f));
     }
@@ -294,8 +353,11 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
         "macos" | "ios" => {
             build.define("_GLFW_COCOA", None);
             for f in &[
-                "cocoa_init.m", "cocoa_joystick.m", "cocoa_monitor.m",
-                "cocoa_window.m", "nsgl_context.m",
+                "cocoa_init.m",
+                "cocoa_joystick.m",
+                "cocoa_monitor.m",
+                "cocoa_window.m",
+                "nsgl_context.m",
             ] {
                 build.file(format!("{}/{}", glfw_src, f));
             }
@@ -303,11 +365,16 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
                 build.file(format!("{}/{}", glfw_src, f));
             }
             vec![
-                "-framework".into(), "Cocoa".into(),
-                "-framework".into(), "IOKit".into(),
-                "-framework".into(), "CoreFoundation".into(),
-                "-framework".into(), "CoreVideo".into(),
-                "-install_name".into(), "@rpath/libglfw.dylib".into(),
+                "-framework".into(),
+                "Cocoa".into(),
+                "-framework".into(),
+                "IOKit".into(),
+                "-framework".into(),
+                "CoreFoundation".into(),
+                "-framework".into(),
+                "CoreVideo".into(),
+                "-install_name".into(),
+                "@rpath/libglfw.dylib".into(),
             ]
         }
         "windows" => {
@@ -318,9 +385,14 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
                 build.define("WINVER", Some("0x0501"));
             }
             for f in &[
-                "win32_init.c", "win32_joystick.c", "win32_monitor.c",
-                "win32_window.c", "wgl_context.c",
-                "win32_module.c", "win32_time.c", "win32_thread.c",
+                "win32_init.c",
+                "win32_joystick.c",
+                "win32_monitor.c",
+                "win32_window.c",
+                "wgl_context.c",
+                "win32_module.c",
+                "win32_time.c",
+                "win32_thread.c",
             ] {
                 build.file(format!("{}/{}", glfw_src, f));
             }
@@ -332,14 +404,23 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
             // When cross-compiling for Linux (e.g. from macOS via zigbuild), X11
             // headers aren't in the default sysroot. Use vendored headers if available.
             let x11_include = format!("{}/x11-include", vendor);
-            if std::path::Path::new(&x11_include).join("X11/Xlib.h").exists() {
+            if std::path::Path::new(&x11_include)
+                .join("X11/Xlib.h")
+                .exists()
+            {
                 build.include(&x11_include);
             }
             for f in &[
-                "x11_init.c", "x11_monitor.c", "x11_window.c",
-                "xkb_unicode.c", "glx_context.c",
-                "posix_module.c", "posix_time.c", "posix_thread.c",
-                "posix_poll.c", "linux_joystick.c",
+                "x11_init.c",
+                "x11_monitor.c",
+                "x11_window.c",
+                "xkb_unicode.c",
+                "glx_context.c",
+                "posix_module.c",
+                "posix_time.c",
+                "posix_thread.c",
+                "posix_poll.c",
+                "linux_joystick.c",
             ] {
                 build.file(format!("{}/{}", glfw_src, f));
             }
@@ -350,13 +431,26 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
             let host = std::env::var("HOST").unwrap_or_default();
             let is_cross = target != host && !target.is_empty();
             if is_cross {
-                vec!["-Wl,--allow-shlib-undefined".into(), "-lpthread".into(), "-lm".into(), "-ldl".into()]
+                vec![
+                    "-Wl,--allow-shlib-undefined".into(),
+                    "-lpthread".into(),
+                    "-lm".into(),
+                    "-ldl".into(),
+                ]
             } else {
-                vec!["-lX11".into(), "-lpthread".into(), "-lm".into(), "-ldl".into()]
+                vec![
+                    "-lX11".into(),
+                    "-lpthread".into(),
+                    "-lm".into(),
+                    "-ldl".into(),
+                ]
             }
         }
         _ => {
-            eprintln!("cargo:warning=GLFW: unsupported target OS '{}', using null backend only", target_os);
+            eprintln!(
+                "cargo:warning=GLFW: unsupported target OS '{}', using null backend only",
+                target_os
+            );
             vec![]
         }
     };
@@ -396,7 +490,11 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
     let host = std::env::var("HOST").unwrap_or_default();
     let is_cross = target != host && !target.is_empty();
     if target_os == "windows" && is_cross {
-        let arch = if target.contains("aarch64") { "arm64" } else { "x86_64" };
+        let arch = if target.contains("aarch64") {
+            "arm64"
+        } else {
+            "x86_64"
+        };
         let home = std::env::var("HOME").unwrap_or_default();
         let xwin_cache = format!("{}/.cache/cargo-xwin/xwin", home);
         let xwin_dir = if std::path::Path::new(&xwin_cache).exists() {
@@ -405,11 +503,16 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
             format!("{}/Library/Caches/cargo-xwin/xwin", home)
         };
         // Convert -lfoo flags to foo.lib
-        let link_libs: Vec<String> = framework_args.iter()
+        let link_libs: Vec<String> = framework_args
+            .iter()
             .filter(|a| a.starts_with("-l"))
             .map(|a| format!("{}.lib", &a[2..]))
             .collect();
-        let machine = if target.contains("aarch64") { "/machine:arm64x" } else { "/machine:x64" };
+        let machine = if target.contains("aarch64") {
+            "/machine:arm64x"
+        } else {
+            "/machine:x64"
+        };
         let status = lld_link_command()
             .arg("/dll")
             .arg("/force:multiple")
@@ -431,20 +534,17 @@ fn build_glfw_shared(vendor: &str, out_dir: &str, release_dir: &str, target_os: 
 
     let cc_tool = cc::Build::new().get_compiler();
     let mut cmd = std::process::Command::new(cc_tool.path());
-    cmd.arg(shared_flag)
-       .arg(whole_archive_flag)
-       .arg(&archive);
+    cmd.arg(shared_flag).arg(whole_archive_flag).arg(&archive);
 
     // On Linux, close the whole-archive group
     if target_os != "macos" && target_os != "ios" {
         cmd.arg("-Wl,--no-whole-archive");
     }
 
-    cmd.args(&framework_args)
-       .arg("-o")
-       .arg(&output);
+    cmd.args(&framework_args).arg("-o").arg(&output);
 
-    let status = cmd.status()
+    let status = cmd
+        .status()
         .unwrap_or_else(|e| panic!("Failed to link {}: {}", dylib_name, e));
     assert!(status.success(), "Failed to link {}", dylib_name);
     eprintln!("cargo:warning=Built {}", output);

@@ -14,8 +14,8 @@ use std::ffi::c_void;
 use std::slice;
 use std::sync::mpsc;
 
-use rapier2d::prelude::*;
 use rapier2d::parry::query::{DefaultQueryDispatcher, ShapeCastOptions};
+use rapier2d::prelude::*;
 
 // ---------------------------------------------------------------------------
 // World state
@@ -78,7 +78,9 @@ impl PhysicsWorld {
 
         // Temporarily take the one-way platforms map to avoid borrow conflict with self
         let owp = std::mem::take(&mut self.one_way_platforms);
-        let hooks = SgePhysicsHooks2D { one_way_platforms: &owp };
+        let hooks = SgePhysicsHooks2D {
+            one_way_platforms: &owp,
+        };
 
         self.physics_pipeline.step(
             self.gravity,
@@ -102,16 +104,12 @@ impl PhysicsWorld {
         while let Ok(event) = contact_recv.try_recv() {
             match event {
                 CollisionEvent::Started(c1, c2, _flags) => {
-                    self.contact_start_buf.push((
-                        collider_handle_to_u64(c1),
-                        collider_handle_to_u64(c2),
-                    ));
+                    self.contact_start_buf
+                        .push((collider_handle_to_u64(c1), collider_handle_to_u64(c2)));
                 }
                 CollisionEvent::Stopped(c1, c2, _flags) => {
-                    self.contact_stop_buf.push((
-                        collider_handle_to_u64(c1),
-                        collider_handle_to_u64(c2),
-                    ));
+                    self.contact_stop_buf
+                        .push((collider_handle_to_u64(c1), collider_handle_to_u64(c2)));
                 }
             }
         }
@@ -232,7 +230,13 @@ pub unsafe extern "C" fn sge_phys_world_get_gravity(world: *mut c_void, out: *mu
 // Rigid body lifecycle
 // ---------------------------------------------------------------------------
 
-unsafe fn create_body(world: *mut c_void, body_type: RigidBodyType, x: f32, y: f32, angle: f32) -> u64 {
+unsafe fn create_body(
+    world: *mut c_void,
+    body_type: RigidBodyType,
+    x: f32,
+    y: f32,
+    angle: f32,
+) -> u64 {
     let w = &mut *(world as *mut PhysicsWorld);
     let body = RigidBodyBuilder::new(body_type)
         .translation(Vector::new(x, y))
@@ -242,17 +246,32 @@ unsafe fn create_body(world: *mut c_void, body_type: RigidBodyType, x: f32, y: f
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_create_dynamic_body(world: *mut c_void, x: f32, y: f32, angle: f32) -> u64 {
+pub unsafe extern "C" fn sge_phys_create_dynamic_body(
+    world: *mut c_void,
+    x: f32,
+    y: f32,
+    angle: f32,
+) -> u64 {
     create_body(world, RigidBodyType::Dynamic, x, y, angle)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_create_static_body(world: *mut c_void, x: f32, y: f32, angle: f32) -> u64 {
+pub unsafe extern "C" fn sge_phys_create_static_body(
+    world: *mut c_void,
+    x: f32,
+    y: f32,
+    angle: f32,
+) -> u64 {
     create_body(world, RigidBodyType::Fixed, x, y, angle)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_create_kinematic_body(world: *mut c_void, x: f32, y: f32, angle: f32) -> u64 {
+pub unsafe extern "C" fn sge_phys_create_kinematic_body(
+    world: *mut c_void,
+    x: f32,
+    y: f32,
+    angle: f32,
+) -> u64 {
     create_body(world, RigidBodyType::KinematicPositionBased, x, y, angle)
 }
 
@@ -297,7 +316,11 @@ pub unsafe extern "C" fn sge_phys_body_get_angle(world: *mut c_void, body: u64) 
 
 /// Fills `out` with [vx, vy].
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_get_linear_velocity(world: *mut c_void, body: u64, out: *mut f32) {
+pub unsafe extern "C" fn sge_phys_body_get_linear_velocity(
+    world: *mut c_void,
+    body: u64,
+    out: *mut f32,
+) {
     let w = &*(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get(u64_to_body_handle(body)) {
         let vel = b.linvel();
@@ -337,7 +360,12 @@ pub unsafe extern "C" fn sge_phys_body_set_angle(world: *mut c_void, body: u64, 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_set_linear_velocity(world: *mut c_void, body: u64, vx: f32, vy: f32) {
+pub unsafe extern "C" fn sge_phys_body_set_linear_velocity(
+    world: *mut c_void,
+    body: u64,
+    vx: f32,
+    vy: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.set_linvel(Vector::new(vx, vy), true);
@@ -345,7 +373,11 @@ pub unsafe extern "C" fn sge_phys_body_set_linear_velocity(world: *mut c_void, b
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_set_angular_velocity(world: *mut c_void, body: u64, omega: f32) {
+pub unsafe extern "C" fn sge_phys_body_set_angular_velocity(
+    world: *mut c_void,
+    body: u64,
+    omega: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.set_angvel(omega, true);
@@ -353,7 +385,12 @@ pub unsafe extern "C" fn sge_phys_body_set_angular_velocity(world: *mut c_void, 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_apply_force(world: *mut c_void, body: u64, fx: f32, fy: f32) {
+pub unsafe extern "C" fn sge_phys_body_apply_force(
+    world: *mut c_void,
+    body: u64,
+    fx: f32,
+    fy: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.add_force(Vector::new(fx, fy), true);
@@ -361,7 +398,12 @@ pub unsafe extern "C" fn sge_phys_body_apply_force(world: *mut c_void, body: u64
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_apply_impulse(world: *mut c_void, body: u64, ix: f32, iy: f32) {
+pub unsafe extern "C" fn sge_phys_body_apply_impulse(
+    world: *mut c_void,
+    body: u64,
+    ix: f32,
+    iy: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.apply_impulse(Vector::new(ix, iy), true);
@@ -377,7 +419,11 @@ pub unsafe extern "C" fn sge_phys_body_apply_torque(world: *mut c_void, body: u6
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_set_linear_damping(world: *mut c_void, body: u64, damping: f32) {
+pub unsafe extern "C" fn sge_phys_body_set_linear_damping(
+    world: *mut c_void,
+    body: u64,
+    damping: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.set_linear_damping(damping);
@@ -385,7 +431,11 @@ pub unsafe extern "C" fn sge_phys_body_set_linear_damping(world: *mut c_void, bo
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_set_angular_damping(world: *mut c_void, body: u64, damping: f32) {
+pub unsafe extern "C" fn sge_phys_body_set_angular_damping(
+    world: *mut c_void,
+    body: u64,
+    damping: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.set_angular_damping(damping);
@@ -393,7 +443,11 @@ pub unsafe extern "C" fn sge_phys_body_set_angular_damping(world: *mut c_void, b
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_set_gravity_scale(world: *mut c_void, body: u64, scale: f32) {
+pub unsafe extern "C" fn sge_phys_body_set_gravity_scale(
+    world: *mut c_void,
+    body: u64,
+    scale: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.set_gravity_scale(scale, true);
@@ -418,7 +472,11 @@ pub unsafe extern "C" fn sge_phys_body_wake_up(world: *mut c_void, body: u64) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_set_fixed_rotation(world: *mut c_void, body: u64, fixed: i32) {
+pub unsafe extern "C" fn sge_phys_body_set_fixed_rotation(
+    world: *mut c_void,
+    body: u64,
+    fixed: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.lock_rotations(fixed != 0, true);
@@ -431,7 +489,12 @@ pub unsafe extern "C" fn sge_phys_body_set_fixed_rotation(world: *mut c_void, bo
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_apply_force_at_point(
-    world: *mut c_void, body: u64, fx: f32, fy: f32, px: f32, py: f32,
+    world: *mut c_void,
+    body: u64,
+    fx: f32,
+    fy: f32,
+    px: f32,
+    py: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
@@ -441,7 +504,12 @@ pub unsafe extern "C" fn sge_phys_body_apply_force_at_point(
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_apply_impulse_at_point(
-    world: *mut c_void, body: u64, ix: f32, iy: f32, px: f32, py: f32,
+    world: *mut c_void,
+    body: u64,
+    ix: f32,
+    iy: f32,
+    px: f32,
+    py: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
@@ -450,7 +518,11 @@ pub unsafe extern "C" fn sge_phys_body_apply_impulse_at_point(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_apply_torque_impulse(world: *mut c_void, body: u64, impulse: f32) {
+pub unsafe extern "C" fn sge_phys_body_apply_torque_impulse(
+    world: *mut c_void,
+    body: u64,
+    impulse: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.apply_torque_impulse(impulse, true);
@@ -480,19 +552,28 @@ pub unsafe extern "C" fn sge_phys_body_reset_torques(world: *mut c_void, body: u
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_get_linear_damping(world: *mut c_void, body: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body)).map(|b| b.linear_damping()).unwrap_or(0.0)
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| b.linear_damping())
+        .unwrap_or(0.0)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_get_angular_damping(world: *mut c_void, body: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body)).map(|b| b.angular_damping()).unwrap_or(0.0)
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| b.angular_damping())
+        .unwrap_or(0.0)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_get_gravity_scale(world: *mut c_void, body: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body)).map(|b| b.gravity_scale()).unwrap_or(1.0)
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| b.gravity_scale())
+        .unwrap_or(1.0)
 }
 
 // ---------------------------------------------------------------------------
@@ -503,12 +584,15 @@ pub unsafe extern "C" fn sge_phys_body_get_gravity_scale(world: *mut c_void, bod
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_get_type(world: *mut c_void, body: u64) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body)).map(|b| match b.body_type() {
-        RigidBodyType::Dynamic                  => 0,
-        RigidBodyType::Fixed                    => 1,
-        RigidBodyType::KinematicPositionBased   => 2,
-        RigidBodyType::KinematicVelocityBased   => 3,
-    }).unwrap_or(-1)
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| match b.body_type() {
+            RigidBodyType::Dynamic => 0,
+            RigidBodyType::Fixed => 1,
+            RigidBodyType::KinematicPositionBased => 2,
+            RigidBodyType::KinematicVelocityBased => 3,
+        })
+        .unwrap_or(-1)
 }
 
 #[no_mangle]
@@ -522,12 +606,18 @@ pub unsafe extern "C" fn sge_phys_body_set_enabled(world: *mut c_void, body: u64
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_is_enabled(world: *mut c_void, body: u64) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body)).map(|b| b.is_enabled() as i32).unwrap_or(0)
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| b.is_enabled() as i32)
+        .unwrap_or(0)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_set_enabled_translations(
-    world: *mut c_void, body: u64, x: i32, y: i32,
+    world: *mut c_void,
+    body: u64,
+    x: i32,
+    y: i32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
@@ -536,17 +626,25 @@ pub unsafe extern "C" fn sge_phys_body_set_enabled_translations(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_is_translation_locked_x(world: *mut c_void, body: u64) -> i32 {
+pub unsafe extern "C" fn sge_phys_body_is_translation_locked_x(
+    world: *mut c_void,
+    body: u64,
+) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body))
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
         .map(|b| b.locked_axes().contains(LockedAxes::TRANSLATION_LOCKED_X) as i32)
         .unwrap_or(0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_is_translation_locked_y(world: *mut c_void, body: u64) -> i32 {
+pub unsafe extern "C" fn sge_phys_body_is_translation_locked_y(
+    world: *mut c_void,
+    body: u64,
+) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body))
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
         .map(|b| b.locked_axes().contains(LockedAxes::TRANSLATION_LOCKED_Y) as i32)
         .unwrap_or(0)
 }
@@ -554,13 +652,18 @@ pub unsafe extern "C" fn sge_phys_body_is_translation_locked_y(world: *mut c_voi
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_is_rotation_locked(world: *mut c_void, body: u64) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body))
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
         .map(|b| b.locked_axes().contains(LockedAxes::ROTATION_LOCKED_Z) as i32)
         .unwrap_or(0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_body_set_dominance_group(world: *mut c_void, body: u64, group: i32) {
+pub unsafe extern "C" fn sge_phys_body_set_dominance_group(
+    world: *mut c_void,
+    body: u64,
+    group: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(b) = w.rigid_body_set.get_mut(u64_to_body_handle(body)) {
         b.set_dominance_group(group as i8);
@@ -570,7 +673,8 @@ pub unsafe extern "C" fn sge_phys_body_set_dominance_group(world: *mut c_void, b
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_get_dominance_group(world: *mut c_void, body: u64) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body))
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
         .map(|b| b.dominance_group() as i32)
         .unwrap_or(0)
 }
@@ -578,7 +682,9 @@ pub unsafe extern "C" fn sge_phys_body_get_dominance_group(world: *mut c_void, b
 /// Gets world-space center of mass. Fills `out` with [x, y].
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_get_world_center_of_mass(
-    world: *mut c_void, body: u64, out: *mut f32,
+    world: *mut c_void,
+    body: u64,
+    out: *mut f32,
 ) {
     let w = &*(world as *mut PhysicsWorld);
     let arr = slice::from_raw_parts_mut(out, 2);
@@ -607,7 +713,10 @@ pub unsafe extern "C" fn sge_phys_body_enable_ccd(world: *mut c_void, body: u64,
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_is_ccd_enabled(world: *mut c_void, body: u64) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.rigid_body_set.get(u64_to_body_handle(body)).map(|b| b.is_ccd_enabled() as i32).unwrap_or(0)
+    w.rigid_body_set
+        .get(u64_to_body_handle(body))
+        .map(|b| b.is_ccd_enabled() as i32)
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -629,7 +738,11 @@ pub unsafe extern "C" fn sge_phys_body_sleep(world: *mut c_void, body: u64) {
 /// Gets the velocity of a point on the body in world space. Fills `out` with [vx, vy].
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_body_get_velocity_at_point(
-    world: *mut c_void, body: u64, px: f32, py: f32, out: *mut f32,
+    world: *mut c_void,
+    body: u64,
+    px: f32,
+    py: f32,
+    out: *mut f32,
 ) {
     let w = &*(world as *mut PhysicsWorld);
     let arr = slice::from_raw_parts_mut(out, 2);
@@ -737,7 +850,11 @@ pub unsafe extern "C" fn sge_phys_destroy_collider(world: *mut c_void, collider:
 // ---------------------------------------------------------------------------
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_density(world: *mut c_void, collider: u64, density: f32) {
+pub unsafe extern "C" fn sge_phys_collider_set_density(
+    world: *mut c_void,
+    collider: u64,
+    density: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_density(density);
@@ -745,7 +862,11 @@ pub unsafe extern "C" fn sge_phys_collider_set_density(world: *mut c_void, colli
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_friction(world: *mut c_void, collider: u64, friction: f32) {
+pub unsafe extern "C" fn sge_phys_collider_set_friction(
+    world: *mut c_void,
+    collider: u64,
+    friction: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_friction(friction);
@@ -753,7 +874,11 @@ pub unsafe extern "C" fn sge_phys_collider_set_friction(world: *mut c_void, coll
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_restitution(world: *mut c_void, collider: u64, restitution: f32) {
+pub unsafe extern "C" fn sge_phys_collider_set_restitution(
+    world: *mut c_void,
+    collider: u64,
+    restitution: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_restitution(restitution);
@@ -761,7 +886,11 @@ pub unsafe extern "C" fn sge_phys_collider_set_restitution(world: *mut c_void, c
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_sensor(world: *mut c_void, collider: u64, sensor: i32) {
+pub unsafe extern "C" fn sge_phys_collider_set_sensor(
+    world: *mut c_void,
+    collider: u64,
+    sensor: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_sensor(sensor != 0);
@@ -775,29 +904,48 @@ pub unsafe extern "C" fn sge_phys_collider_set_sensor(world: *mut c_void, collid
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_density(world: *mut c_void, collider: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider)).map(|c| c.density()).unwrap_or(0.0)
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
+        .map(|c| c.density())
+        .unwrap_or(0.0)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_friction(world: *mut c_void, collider: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider)).map(|c| c.friction()).unwrap_or(0.0)
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
+        .map(|c| c.friction())
+        .unwrap_or(0.0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_get_restitution(world: *mut c_void, collider: u64) -> f32 {
+pub unsafe extern "C" fn sge_phys_collider_get_restitution(
+    world: *mut c_void,
+    collider: u64,
+) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider)).map(|c| c.restitution()).unwrap_or(0.0)
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
+        .map(|c| c.restitution())
+        .unwrap_or(0.0)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_is_sensor(world: *mut c_void, collider: u64) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider)).map(|c| c.is_sensor() as i32).unwrap_or(0)
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
+        .map(|c| c.is_sensor() as i32)
+        .unwrap_or(0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_enabled(world: *mut c_void, collider: u64, enabled: i32) {
+pub unsafe extern "C" fn sge_phys_collider_set_enabled(
+    world: *mut c_void,
+    collider: u64,
+    enabled: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_enabled(enabled != 0);
@@ -807,13 +955,18 @@ pub unsafe extern "C" fn sge_phys_collider_set_enabled(world: *mut c_void, colli
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_is_enabled(world: *mut c_void, collider: u64) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider)).map(|c| c.is_enabled() as i32).unwrap_or(0)
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
+        .map(|c| c.is_enabled() as i32)
+        .unwrap_or(0)
 }
 
 /// Gets collider position relative to parent body. Fills `out` with [x, y, angle].
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_position_wrt_parent(
-    world: *mut c_void, collider: u64, out: *mut f32,
+    world: *mut c_void,
+    collider: u64,
+    out: *mut f32,
 ) {
     let w = &*(world as *mut PhysicsWorld);
     let arr = slice::from_raw_parts_mut(out, 3);
@@ -823,17 +976,25 @@ pub unsafe extern "C" fn sge_phys_collider_get_position_wrt_parent(
             arr[1] = rel.translation.y;
             arr[2] = rel.rotation.angle();
         } else {
-            arr[0] = 0.0; arr[1] = 0.0; arr[2] = 0.0;
+            arr[0] = 0.0;
+            arr[1] = 0.0;
+            arr[2] = 0.0;
         }
     } else {
-        arr[0] = 0.0; arr[1] = 0.0; arr[2] = 0.0;
+        arr[0] = 0.0;
+        arr[1] = 0.0;
+        arr[2] = 0.0;
     }
 }
 
 /// Sets collider position relative to parent body.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_set_position_wrt_parent(
-    world: *mut c_void, collider: u64, x: f32, y: f32, angle: f32,
+    world: *mut c_void,
+    collider: u64,
+    x: f32,
+    y: f32,
+    angle: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
@@ -844,7 +1005,9 @@ pub unsafe extern "C" fn sge_phys_collider_set_position_wrt_parent(
 /// Gets collider world position. Fills `out` with [x, y, angle].
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_position(
-    world: *mut c_void, collider: u64, out: *mut f32,
+    world: *mut c_void,
+    collider: u64,
+    out: *mut f32,
 ) {
     let w = &*(world as *mut PhysicsWorld);
     let arr = slice::from_raw_parts_mut(out, 3);
@@ -854,35 +1017,57 @@ pub unsafe extern "C" fn sge_phys_collider_get_position(
         arr[1] = pos.translation.y;
         arr[2] = pos.rotation.angle();
     } else {
-        arr[0] = 0.0; arr[1] = 0.0; arr[2] = 0.0;
+        arr[0] = 0.0;
+        arr[1] = 0.0;
+        arr[2] = 0.0;
     }
 }
 
 /// Returns collider shape type: 0=ball, 1=cuboid, 2=capsule, 3=segment, 4=triangle,
 /// 5=trimesh, 6=polyline, 7=heightfield, 8=compound, 9=convex_polygon, 99=unknown
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_get_shape_type(world: *mut c_void, collider: u64) -> i32 {
+pub unsafe extern "C" fn sge_phys_collider_get_shape_type(
+    world: *mut c_void,
+    collider: u64,
+) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider)).map(|c| {
-        let shape = c.shape();
-        if shape.as_ball().is_some()            { 0 }
-        else if shape.as_cuboid().is_some()     { 1 }
-        else if shape.as_capsule().is_some()    { 2 }
-        else if shape.as_segment().is_some()    { 3 }
-        else if shape.as_triangle().is_some()   { 4 }
-        else if shape.as_trimesh().is_some()    { 5 }
-        else if shape.as_polyline().is_some()   { 6 }
-        else if shape.as_heightfield().is_some(){ 7 }
-        else if shape.as_compound().is_some()   { 8 }
-        else if shape.as_convex_polygon().is_some() { 9 }
-        else { 99 }
-    }).unwrap_or(-1)
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
+        .map(|c| {
+            let shape = c.shape();
+            if shape.as_ball().is_some() {
+                0
+            } else if shape.as_cuboid().is_some() {
+                1
+            } else if shape.as_capsule().is_some() {
+                2
+            } else if shape.as_segment().is_some() {
+                3
+            } else if shape.as_triangle().is_some() {
+                4
+            } else if shape.as_trimesh().is_some() {
+                5
+            } else if shape.as_polyline().is_some() {
+                6
+            } else if shape.as_heightfield().is_some() {
+                7
+            } else if shape.as_compound().is_some() {
+                8
+            } else if shape.as_convex_polygon().is_some() {
+                9
+            } else {
+                99
+            }
+        })
+        .unwrap_or(-1)
 }
 
 /// Gets collider AABB. Fills `out` with [minX, minY, maxX, maxY].
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_aabb(
-    world: *mut c_void, collider: u64, out: *mut f32,
+    world: *mut c_void,
+    collider: u64,
+    out: *mut f32,
 ) {
     let w = &*(world as *mut PhysicsWorld);
     let arr = slice::from_raw_parts_mut(out, 4);
@@ -893,15 +1078,22 @@ pub unsafe extern "C" fn sge_phys_collider_get_aabb(
         arr[2] = aabb.maxs.x;
         arr[3] = aabb.maxs.y;
     } else {
-        arr[0] = 0.0; arr[1] = 0.0; arr[2] = 0.0; arr[3] = 0.0;
+        arr[0] = 0.0;
+        arr[1] = 0.0;
+        arr[2] = 0.0;
+        arr[3] = 0.0;
     }
 }
 
 /// Gets the parent body handle of a collider. Returns 0 if no parent (unattached).
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_get_parent_body(world: *mut c_void, collider: u64) -> u64 {
+pub unsafe extern "C" fn sge_phys_collider_get_parent_body(
+    world: *mut c_void,
+    collider: u64,
+) -> u64 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider))
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
         .and_then(|c| c.parent())
         .map(body_handle_to_u64)
         .unwrap_or(0)
@@ -910,7 +1102,10 @@ pub unsafe extern "C" fn sge_phys_collider_get_parent_body(world: *mut c_void, c
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_mass(world: *mut c_void, collider: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider)).map(|c| c.mass()).unwrap_or(0.0)
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
+        .map(|c| c.mass())
+        .unwrap_or(0.0)
 }
 
 #[no_mangle]
@@ -922,7 +1117,11 @@ pub unsafe extern "C" fn sge_phys_collider_set_mass(world: *mut c_void, collider
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_contact_skin(world: *mut c_void, collider: u64, skin: f32) {
+pub unsafe extern "C" fn sge_phys_collider_set_contact_skin(
+    world: *mut c_void,
+    collider: u64,
+    skin: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_contact_skin(skin);
@@ -934,7 +1133,11 @@ pub unsafe extern "C" fn sge_phys_collider_set_contact_skin(world: *mut c_void, 
 // ---------------------------------------------------------------------------
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_active_events(world: *mut c_void, collider: u64, flags: i32) {
+pub unsafe extern "C" fn sge_phys_collider_set_active_events(
+    world: *mut c_void,
+    collider: u64,
+    flags: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_active_events(ActiveEvents::from_bits_truncate(flags as u32));
@@ -942,15 +1145,23 @@ pub unsafe extern "C" fn sge_phys_collider_set_active_events(world: *mut c_void,
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_get_active_events(world: *mut c_void, collider: u64) -> i32 {
+pub unsafe extern "C" fn sge_phys_collider_get_active_events(
+    world: *mut c_void,
+    collider: u64,
+) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider))
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
         .map(|c| c.active_events().bits() as i32)
         .unwrap_or(0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_set_active_collision_types(world: *mut c_void, collider: u64, flags: i32) {
+pub unsafe extern "C" fn sge_phys_collider_set_active_collision_types(
+    world: *mut c_void,
+    collider: u64,
+    flags: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
         c.set_active_collision_types(ActiveCollisionTypes::from_bits_truncate(flags as u16));
@@ -958,9 +1169,13 @@ pub unsafe extern "C" fn sge_phys_collider_set_active_collision_types(world: *mu
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_collider_get_active_collision_types(world: *mut c_void, collider: u64) -> i32 {
+pub unsafe extern "C" fn sge_phys_collider_get_active_collision_types(
+    world: *mut c_void,
+    collider: u64,
+) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider))
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
         .map(|c| c.active_collision_types().bits() as i32)
         .unwrap_or(0)
 }
@@ -973,24 +1188,27 @@ pub unsafe extern "C" fn sge_phys_collider_get_active_collision_types(world: *mu
 /// `vertices`: flat [x0,y0,x1,y1,...], `indices`: flat [i0,i1,i2, i3,i4,i5,...] (triangles).
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_create_trimesh_collider(
-    world: *mut c_void, body: u64,
-    vertices: *const f32, vertex_count: i32,
-    indices: *const u32, index_count: i32,
+    world: *mut c_void,
+    body: u64,
+    vertices: *const f32,
+    vertex_count: i32,
+    indices: *const u32,
+    index_count: i32,
 ) -> u64 {
     let w = &mut *(world as *mut PhysicsWorld);
     let verts = slice::from_raw_parts(vertices, (vertex_count * 2) as usize);
-    let idxs  = slice::from_raw_parts(indices, index_count as usize);
+    let idxs = slice::from_raw_parts(indices, index_count as usize);
 
     let points: Vec<Vector> = (0..vertex_count as usize)
         .map(|i| Vector::new(verts[i * 2], verts[i * 2 + 1]))
         .collect();
-    let tris: Vec<[u32; 3]> = idxs.chunks_exact(3)
-        .map(|c| [c[0], c[1], c[2]])
-        .collect();
+    let tris: Vec<[u32; 3]> = idxs.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
 
     let collider = ColliderBuilder::trimesh(points, tris).unwrap().build();
     let handle = w.collider_set.insert_with_parent(
-        collider, u64_to_body_handle(body), &mut w.rigid_body_set,
+        collider,
+        u64_to_body_handle(body),
+        &mut w.rigid_body_set,
     );
     collider_handle_to_u64(handle)
 }
@@ -999,16 +1217,21 @@ pub unsafe extern "C" fn sge_phys_create_trimesh_collider(
 /// `heights`: row-major array of `num_cols` height values.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_create_heightfield_collider(
-    world: *mut c_void, body: u64,
-    heights: *const f32, num_cols: i32,
-    scale_x: f32, scale_y: f32,
+    world: *mut c_void,
+    body: u64,
+    heights: *const f32,
+    num_cols: i32,
+    scale_x: f32,
+    scale_y: f32,
 ) -> u64 {
     let w = &mut *(world as *mut PhysicsWorld);
     let h = slice::from_raw_parts(heights, num_cols as usize);
     let heights_vec: Vec<Real> = h.to_vec();
     let collider = ColliderBuilder::heightfield(heights_vec, Vector::new(scale_x, scale_y)).build();
     let handle = w.collider_set.insert_with_parent(
-        collider, u64_to_body_handle(body), &mut w.rigid_body_set,
+        collider,
+        u64_to_body_handle(body),
+        &mut w.rigid_body_set,
     );
     collider_handle_to_u64(handle)
 }
@@ -1186,7 +1409,10 @@ pub unsafe extern "C" fn sge_phys_revolute_joint_enable_limits(
     enable: i32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(rev) = j.data.as_revolute_mut() {
             if enable != 0 {
                 // Enable with reasonable default limits if not already set
@@ -1210,7 +1436,10 @@ pub unsafe extern "C" fn sge_phys_revolute_joint_set_limits(
     upper: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(rev) = j.data.as_revolute_mut() {
             rev.set_limits([lower, upper]);
         }
@@ -1268,7 +1497,10 @@ pub unsafe extern "C" fn sge_phys_revolute_joint_enable_motor(
     enable: i32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(rev) = j.data.as_revolute_mut() {
             if enable != 0 {
                 // Enable motor with velocity target
@@ -1289,7 +1521,10 @@ pub unsafe extern "C" fn sge_phys_revolute_joint_set_motor_speed(
     speed: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(rev) = j.data.as_revolute_mut() {
             // Get current damping factor, preserve it
             let damping = rev.motor().map(|m| m.damping).unwrap_or(1.0);
@@ -1306,7 +1541,10 @@ pub unsafe extern "C" fn sge_phys_revolute_joint_set_max_motor_torque(
     torque: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(rev) = j.data.as_revolute_mut() {
             rev.set_motor_max_force(torque);
         }
@@ -1332,10 +1570,7 @@ pub unsafe extern "C" fn sge_phys_revolute_joint_get_motor_speed(
 
 /// Gets the current angle of the revolute joint (radians).
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_revolute_joint_get_angle(
-    world: *mut c_void,
-    joint: u64,
-) -> f32 {
+pub unsafe extern "C" fn sge_phys_revolute_joint_get_angle(world: *mut c_void, joint: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
     if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
         if let Some(rev) = j.data.as_revolute() {
@@ -1365,7 +1600,10 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_enable_limits(
     enable: i32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(pris) = j.data.as_prismatic_mut() {
             if enable != 0 {
                 // Enable with reasonable default limits if not already set
@@ -1388,7 +1626,10 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_set_limits(
     upper: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(pris) = j.data.as_prismatic_mut() {
             pris.set_limits([lower, upper]);
         }
@@ -1425,7 +1666,10 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_enable_motor(
     enable: i32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(pris) = j.data.as_prismatic_mut() {
             if enable != 0 {
                 pris.set_motor_velocity(0.0, 1.0);
@@ -1444,7 +1688,10 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_set_motor_speed(
     speed: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(pris) = j.data.as_prismatic_mut() {
             let damping = pris.motor().map(|m| m.damping).unwrap_or(1.0);
             pris.set_motor_velocity(speed, damping);
@@ -1460,7 +1707,10 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_set_max_motor_force(
     force: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(pris) = j.data.as_prismatic_mut() {
             pris.set_motor_max_force(force);
         }
@@ -1526,7 +1776,10 @@ pub unsafe extern "C" fn sge_phys_rope_joint_set_max_distance(
     max_dist: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         if let Some(rope) = j.data.as_rope_mut() {
             rope.set_max_distance(max_dist);
         }
@@ -1566,9 +1819,9 @@ pub unsafe extern "C" fn sge_phys_create_motor_joint(
     // Default: zero offset, moderate stiffness/damping.
     let mut joint = GenericJointBuilder::new(JointAxesMask::empty()).build();
     let stiffness = 100.0;
-    let damping   = 20.0;
-    joint.set_motor(JointAxis::LinX,    0.0, 0.0, stiffness, damping);
-    joint.set_motor(JointAxis::LinY,    0.0, 0.0, stiffness, damping);
+    let damping = 20.0;
+    joint.set_motor(JointAxis::LinX, 0.0, 0.0, stiffness, damping);
+    joint.set_motor(JointAxis::LinY, 0.0, 0.0, stiffness, damping);
     joint.set_motor(JointAxis::AngX, 0.0, 0.0, stiffness, damping);
     let handle = w.impulse_joint_set.insert(
         u64_to_body_handle(body1),
@@ -1588,11 +1841,30 @@ pub unsafe extern "C" fn sge_phys_motor_joint_set_linear_offset(
     y: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
-        let sx = j.data.motor(JointAxis::LinX).map(|m| m.stiffness).unwrap_or(100.0);
-        let dx = j.data.motor(JointAxis::LinX).map(|m| m.damping).unwrap_or(20.0);
-        let sy = j.data.motor(JointAxis::LinY).map(|m| m.stiffness).unwrap_or(100.0);
-        let dy = j.data.motor(JointAxis::LinY).map(|m| m.damping).unwrap_or(20.0);
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
+        let sx = j
+            .data
+            .motor(JointAxis::LinX)
+            .map(|m| m.stiffness)
+            .unwrap_or(100.0);
+        let dx = j
+            .data
+            .motor(JointAxis::LinX)
+            .map(|m| m.damping)
+            .unwrap_or(20.0);
+        let sy = j
+            .data
+            .motor(JointAxis::LinY)
+            .map(|m| m.stiffness)
+            .unwrap_or(100.0);
+        let dy = j
+            .data
+            .motor(JointAxis::LinY)
+            .map(|m| m.damping)
+            .unwrap_or(20.0);
         j.data.set_motor(JointAxis::LinX, x, 0.0, sx, dx);
         j.data.set_motor(JointAxis::LinY, y, 0.0, sy, dy);
     }
@@ -1608,8 +1880,16 @@ pub unsafe extern "C" fn sge_phys_motor_joint_get_linear_offset(
     let w = &*(world as *mut PhysicsWorld);
     let arr = slice::from_raw_parts_mut(out, 2);
     if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
-        arr[0] = j.data.motor(JointAxis::LinX).map(|m| m.target_pos).unwrap_or(0.0);
-        arr[1] = j.data.motor(JointAxis::LinY).map(|m| m.target_pos).unwrap_or(0.0);
+        arr[0] = j
+            .data
+            .motor(JointAxis::LinX)
+            .map(|m| m.target_pos)
+            .unwrap_or(0.0);
+        arr[1] = j
+            .data
+            .motor(JointAxis::LinY)
+            .map(|m| m.target_pos)
+            .unwrap_or(0.0);
     } else {
         arr[0] = 0.0;
         arr[1] = 0.0;
@@ -1624,9 +1904,20 @@ pub unsafe extern "C" fn sge_phys_motor_joint_set_angular_offset(
     angle: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
-        let s = j.data.motor(JointAxis::AngX).map(|m| m.stiffness).unwrap_or(100.0);
-        let d = j.data.motor(JointAxis::AngX).map(|m| m.damping).unwrap_or(20.0);
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
+        let s = j
+            .data
+            .motor(JointAxis::AngX)
+            .map(|m| m.stiffness)
+            .unwrap_or(100.0);
+        let d = j
+            .data
+            .motor(JointAxis::AngX)
+            .map(|m| m.damping)
+            .unwrap_or(20.0);
         j.data.set_motor(JointAxis::AngX, angle, 0.0, s, d);
     }
 }
@@ -1639,7 +1930,11 @@ pub unsafe extern "C" fn sge_phys_motor_joint_get_angular_offset(
 ) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
     if let Some(j) = w.impulse_joint_set.get(u64_to_joint_handle(joint)) {
-        return j.data.motor(JointAxis::AngX).map(|m| m.target_pos).unwrap_or(0.0);
+        return j
+            .data
+            .motor(JointAxis::AngX)
+            .map(|m| m.target_pos)
+            .unwrap_or(0.0);
     }
     0.0
 }
@@ -1652,7 +1947,10 @@ pub unsafe extern "C" fn sge_phys_motor_joint_set_max_force(
     force: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         j.data.set_motor_max_force(JointAxis::LinX, force);
         j.data.set_motor_max_force(JointAxis::LinY, force);
     }
@@ -1666,7 +1964,10 @@ pub unsafe extern "C" fn sge_phys_motor_joint_set_max_torque(
     torque: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         j.data.set_motor_max_force(JointAxis::AngX, torque);
     }
 }
@@ -1680,10 +1981,13 @@ pub unsafe extern "C" fn sge_phys_motor_joint_set_correction_factor(
     factor: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
         // Map correction factor to stiffness; damping = 2 * sqrt(stiffness) for critical damping
         let stiffness = factor * 100.0;
-        let damping   = 2.0 * stiffness.sqrt();
+        let damping = 2.0 * stiffness.sqrt();
         for axis in [JointAxis::LinX, JointAxis::LinY, JointAxis::AngX] {
             let target = j.data.motor(axis).map(|m| m.target_pos).unwrap_or(0.0);
             j.data.set_motor(axis, target, 0.0, stiffness, damping);
@@ -1735,14 +2039,20 @@ pub unsafe extern "C" fn sge_phys_contact_pair_points(
 
     if let Some(pair) = w.narrow_phase.contact_pair(c1, c2) {
         // Transform local contact points to world space using collider positions
-        let pos1 = w.collider_set.get(c1).map(|c| *c.position()).unwrap_or(Pose::identity());
+        let pos1 = w
+            .collider_set
+            .get(c1)
+            .map(|c| *c.position())
+            .unwrap_or(Pose::identity());
         for manifold in &pair.manifolds {
             let normal = manifold.data.normal;
             for pt in &manifold.points {
-                if count >= max_points { return count; }
+                if count >= max_points {
+                    return count;
+                }
                 let idx = (count * 5) as usize;
                 let world_pt = pos1 * pt.local_p1;
-                arr[idx]     = normal.x;
+                arr[idx] = normal.x;
                 arr[idx + 1] = normal.y;
                 arr[idx + 2] = world_pt.x;
                 arr[idx + 3] = world_pt.y;
@@ -1804,9 +2114,7 @@ pub unsafe extern "C" fn sge_phys_create_polyline_collider(
         .collect();
 
     // Build index pairs for consecutive segments
-    let indices: Vec<[u32; 2]> = (0..points.len() as u32 - 1)
-        .map(|i| [i, i + 1])
-        .collect();
+    let indices: Vec<[u32; 2]> = (0..points.len() as u32 - 1).map(|i| [i, i + 1]).collect();
 
     let collider = ColliderBuilder::polyline(points, Some(indices)).build();
     let handle = w.collider_set.insert_with_parent(
@@ -1900,11 +2208,9 @@ pub unsafe extern "C" fn sge_phys_ray_cast(
         QueryFilter::default(),
     );
 
-    if let Some((handle, intersection)) = query_pipeline.cast_ray_and_get_normal(
-        &ray,
-        max_dist,
-        true,
-    ) {
+    if let Some((handle, intersection)) =
+        query_pipeline.cast_ray_and_get_normal(&ray, max_dist, true)
+    {
         let hit_point = ray.point_at(intersection.time_of_impact);
         let arr = slice::from_raw_parts_mut(out, 9);
         arr[0] = hit_point.x;
@@ -2044,9 +2350,13 @@ pub unsafe extern "C" fn sge_phys_poll_contact_stop_events(
 // ---------------------------------------------------------------------------
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_revolute_joint_get_max_motor_torque(world: *mut c_void, joint: u64) -> f32 {
+pub unsafe extern "C" fn sge_phys_revolute_joint_get_max_motor_torque(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.impulse_joint_set.get(u64_to_joint_handle(joint))
+    w.impulse_joint_set
+        .get(u64_to_joint_handle(joint))
         .and_then(|j| j.data.as_revolute())
         .and_then(|r| r.motor())
         .map(|m| m.max_force)
@@ -2054,9 +2364,13 @@ pub unsafe extern "C" fn sge_phys_revolute_joint_get_max_motor_torque(world: *mu
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_prismatic_joint_get_motor_speed(world: *mut c_void, joint: u64) -> f32 {
+pub unsafe extern "C" fn sge_phys_prismatic_joint_get_motor_speed(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.impulse_joint_set.get(u64_to_joint_handle(joint))
+    w.impulse_joint_set
+        .get(u64_to_joint_handle(joint))
         .and_then(|j| j.data.as_prismatic())
         .and_then(|p| p.motor())
         .map(|m| m.target_vel)
@@ -2064,9 +2378,13 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_get_motor_speed(world: *mut c_
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_prismatic_joint_get_max_motor_force(world: *mut c_void, joint: u64) -> f32 {
+pub unsafe extern "C" fn sge_phys_prismatic_joint_get_max_motor_force(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.impulse_joint_set.get(u64_to_joint_handle(joint))
+    w.impulse_joint_set
+        .get(u64_to_joint_handle(joint))
         .and_then(|j| j.data.as_prismatic())
         .and_then(|p| p.motor())
         .map(|m| m.max_force)
@@ -2076,26 +2394,35 @@ pub unsafe extern "C" fn sge_phys_prismatic_joint_get_max_motor_force(world: *mu
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_motor_joint_get_max_force(world: *mut c_void, joint: u64) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.impulse_joint_set.get(u64_to_joint_handle(joint))
+    w.impulse_joint_set
+        .get(u64_to_joint_handle(joint))
         .and_then(|j| j.data.motor(JointAxis::LinX))
         .map(|m| m.max_force)
         .unwrap_or(0.0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_motor_joint_get_max_torque(world: *mut c_void, joint: u64) -> f32 {
+pub unsafe extern "C" fn sge_phys_motor_joint_get_max_torque(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.impulse_joint_set.get(u64_to_joint_handle(joint))
+    w.impulse_joint_set
+        .get(u64_to_joint_handle(joint))
         .and_then(|j| j.data.motor(JointAxis::AngX))
         .map(|m| m.max_force)
         .unwrap_or(0.0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_motor_joint_get_correction_factor(world: *mut c_void, joint: u64) -> f32 {
+pub unsafe extern "C" fn sge_phys_motor_joint_get_correction_factor(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
     // Correction factor was stored as stiffness / 100.0. Reverse it.
-    w.impulse_joint_set.get(u64_to_joint_handle(joint))
+    w.impulse_joint_set
+        .get(u64_to_joint_handle(joint))
         .and_then(|j| j.data.motor(JointAxis::LinX))
         .map(|m| m.stiffness / 100.0)
         .unwrap_or(0.0)
@@ -2110,8 +2437,12 @@ pub unsafe extern "C" fn sge_phys_motor_joint_get_correction_factor(world: *mut 
 /// `stiffness` and `damping` controlling the spring-damper behavior.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_create_spring_joint(
-    world: *mut c_void, body1: u64, body2: u64,
-    rest_length: f32, stiffness: f32, damping: f32,
+    world: *mut c_void,
+    body1: u64,
+    body2: u64,
+    rest_length: f32,
+    stiffness: f32,
+    damping: f32,
 ) -> u64 {
     let w = &mut *(world as *mut PhysicsWorld);
     let mut joint = GenericJointBuilder::new(JointAxesMask::empty()).build();
@@ -2119,25 +2450,47 @@ pub unsafe extern "C" fn sge_phys_create_spring_joint(
     joint.set_motor(JointAxis::LinX, rest_length, 0.0, stiffness, damping);
     joint.set_motor(JointAxis::LinY, 0.0, 0.0, stiffness, damping);
     let handle = w.impulse_joint_set.insert(
-        u64_to_body_handle(body1), u64_to_body_handle(body2), joint, true,
+        u64_to_body_handle(body1),
+        u64_to_body_handle(body2),
+        joint,
+        true,
     );
     joint_handle_to_u64(handle)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_spring_joint_set_rest_length(world: *mut c_void, joint: u64, rest_length: f32) {
+pub unsafe extern "C" fn sge_phys_spring_joint_set_rest_length(
+    world: *mut c_void,
+    joint: u64,
+    rest_length: f32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
-        let s = j.data.motor(JointAxis::LinX).map(|m| m.stiffness).unwrap_or(100.0);
-        let d = j.data.motor(JointAxis::LinX).map(|m| m.damping).unwrap_or(10.0);
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
+        let s = j
+            .data
+            .motor(JointAxis::LinX)
+            .map(|m| m.stiffness)
+            .unwrap_or(100.0);
+        let d = j
+            .data
+            .motor(JointAxis::LinX)
+            .map(|m| m.damping)
+            .unwrap_or(10.0);
         j.data.set_motor(JointAxis::LinX, rest_length, 0.0, s, d);
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_spring_joint_get_rest_length(world: *mut c_void, joint: u64) -> f32 {
+pub unsafe extern "C" fn sge_phys_spring_joint_get_rest_length(
+    world: *mut c_void,
+    joint: u64,
+) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.impulse_joint_set.get(u64_to_joint_handle(joint))
+    w.impulse_joint_set
+        .get(u64_to_joint_handle(joint))
         .and_then(|j| j.data.motor(JointAxis::LinX))
         .map(|m| m.target_pos)
         .unwrap_or(0.0)
@@ -2145,13 +2498,25 @@ pub unsafe extern "C" fn sge_phys_spring_joint_get_rest_length(world: *mut c_voi
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_spring_joint_set_params(
-    world: *mut c_void, joint: u64, stiffness: f32, damping: f32,
+    world: *mut c_void,
+    joint: u64,
+    stiffness: f32,
+    damping: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
-    if let Some(j) = w.impulse_joint_set.get_mut(u64_to_joint_handle(joint), true) {
-        let target = j.data.motor(JointAxis::LinX).map(|m| m.target_pos).unwrap_or(0.0);
-        j.data.set_motor(JointAxis::LinX, target, 0.0, stiffness, damping);
-        j.data.set_motor(JointAxis::LinY, 0.0, 0.0, stiffness, damping);
+    if let Some(j) = w
+        .impulse_joint_set
+        .get_mut(u64_to_joint_handle(joint), true)
+    {
+        let target = j
+            .data
+            .motor(JointAxis::LinX)
+            .map(|m| m.target_pos)
+            .unwrap_or(0.0);
+        j.data
+            .set_motor(JointAxis::LinX, target, 0.0, stiffness, damping);
+        j.data
+            .set_motor(JointAxis::LinY, 0.0, 0.0, stiffness, damping);
     }
 }
 
@@ -2166,9 +2531,12 @@ pub unsafe extern "C" fn sge_phys_spring_joint_set_params(
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_cast_shape(
     world: *mut c_void,
-    shape_type: i32, shape_params: *const f32,
-    origin_x: f32, origin_y: f32,
-    dir_x: f32, dir_y: f32,
+    shape_type: i32,
+    shape_params: *const f32,
+    origin_x: f32,
+    origin_y: f32,
+    dir_x: f32,
+    dir_y: f32,
     max_dist: f32,
     out: *mut f32,
 ) -> i32 {
@@ -2183,7 +2551,7 @@ pub unsafe extern "C" fn sge_phys_cast_shape(
     };
 
     let origin = Pose::new(Vector::new(origin_x, origin_y), 0.0);
-    let dir    = Vector::new(dir_x, dir_y);
+    let dir = Vector::new(dir_x, dir_y);
 
     let query_pipeline = w.broad_phase.as_query_pipeline(
         &DefaultQueryDispatcher,
@@ -2193,8 +2561,13 @@ pub unsafe extern "C" fn sge_phys_cast_shape(
     );
 
     if let Some((handle, toi_result)) = query_pipeline.cast_shape(
-        &origin, dir, shape.as_ref(),
-        ShapeCastOptions { max_time_of_impact: max_dist, ..Default::default() },
+        &origin,
+        dir,
+        shape.as_ref(),
+        ShapeCastOptions {
+            max_time_of_impact: max_dist,
+            ..Default::default()
+        },
     ) {
         let arr = slice::from_raw_parts_mut(out, 7);
         let hit_point = Vector::new(origin_x, origin_y) + dir * toi_result.time_of_impact;
@@ -2218,8 +2591,13 @@ pub unsafe extern "C" fn sge_phys_cast_shape(
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_ray_cast_all(
     world: *mut c_void,
-    ox: f32, oy: f32, dx: f32, dy: f32, max_dist: f32,
-    out_hits: *mut f32, max_hits: i32,
+    ox: f32,
+    oy: f32,
+    dx: f32,
+    dy: f32,
+    max_dist: f32,
+    out_hits: *mut f32,
+    max_hits: i32,
 ) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
     let ray = Ray::new(Vector::new(ox, oy), Vector::new(dx, dy));
@@ -2239,7 +2617,7 @@ pub unsafe extern "C" fn sge_phys_ray_cast_all(
         }
         let idx = (count * 7) as usize;
         let hit = ray.point_at(intersection.time_of_impact);
-        arr[idx]     = hit.x;
+        arr[idx] = hit.x;
         arr[idx + 1] = hit.y;
         arr[idx + 2] = intersection.normal.x;
         arr[idx + 3] = intersection.normal.y;
@@ -2256,7 +2634,10 @@ pub unsafe extern "C" fn sge_phys_ray_cast_all(
 /// `out`: [projX, projY, isInside (1.0 or 0.0), colliderLo, colliderHi] = 5 floats.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_project_point(
-    world: *mut c_void, x: f32, y: f32, out: *mut f32,
+    world: *mut c_void,
+    x: f32,
+    y: f32,
+    out: *mut f32,
 ) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
     let pt = Vector::new(x, y);
@@ -2268,9 +2649,7 @@ pub unsafe extern "C" fn sge_phys_project_point(
         QueryFilter::default(),
     );
 
-    if let Some((handle, projection)) = query_pipeline.project_point(
-        pt, Real::MAX, true,
-    ) {
+    if let Some((handle, projection)) = query_pipeline.project_point(pt, Real::MAX, true) {
         let arr = slice::from_raw_parts_mut(out, 5);
         arr[0] = projection.point.x;
         arr[1] = projection.point.y;
@@ -2290,7 +2669,10 @@ pub unsafe extern "C" fn sge_phys_project_point(
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_poll_intersection_start_events(
-    world: *mut c_void, out_collider1: *mut u64, out_collider2: *mut u64, max_events: i32,
+    world: *mut c_void,
+    out_collider1: *mut u64,
+    out_collider2: *mut u64,
+    max_events: i32,
 ) -> i32 {
     // Intersection events are collected via the ChannelEventCollector's intersection channel.
     // Currently, the world step only buffers contact events. We need to extend.
@@ -2301,7 +2683,10 @@ pub unsafe extern "C" fn sge_phys_poll_intersection_start_events(
 
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_poll_intersection_stop_events(
-    world: *mut c_void, out_collider1: *mut u64, out_collider2: *mut u64, max_events: i32,
+    world: *mut c_void,
+    out_collider1: *mut u64,
+    out_collider2: *mut u64,
+    max_events: i32,
 ) -> i32 {
     let _ = (world, out_collider1, out_collider2, max_events);
     0
@@ -2324,15 +2709,22 @@ pub unsafe extern "C" fn sge_phys_world_get_num_solver_iterations(world: *mut c_
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_world_set_num_additional_friction_iterations(world: *mut c_void, iters: i32) {
+pub unsafe extern "C" fn sge_phys_world_set_num_additional_friction_iterations(
+    world: *mut c_void,
+    iters: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     // num_additional_friction_iterations was removed in rapier 0.32;
     // use num_internal_stabilization_iterations as the closest equivalent.
-    w.integration_parameters.num_internal_stabilization_iterations = iters as usize;
+    w.integration_parameters
+        .num_internal_stabilization_iterations = iters as usize;
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sge_phys_world_set_num_internal_pgs_iterations(world: *mut c_void, iters: i32) {
+pub unsafe extern "C" fn sge_phys_world_set_num_internal_pgs_iterations(
+    world: *mut c_void,
+    iters: i32,
+) {
     let w = &mut *(world as *mut PhysicsWorld);
     w.integration_parameters.num_internal_pgs_iterations = iters as usize;
 }
@@ -2348,9 +2740,13 @@ pub unsafe extern "C" fn sge_phys_world_set_num_internal_pgs_iterations(world: *
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_intersect_shape(
     world: *mut c_void,
-    shape_type: i32, shape_params: *const f32,
-    pos_x: f32, pos_y: f32, angle: f32,
-    out_colliders: *mut u64, max_results: i32,
+    shape_type: i32,
+    shape_params: *const f32,
+    pos_x: f32,
+    pos_y: f32,
+    angle: f32,
+    out_colliders: *mut u64,
+    max_results: i32,
 ) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
     let params = slice::from_raw_parts(shape_params, 2);
@@ -2373,10 +2769,10 @@ pub unsafe extern "C" fn sge_phys_intersect_shape(
         QueryFilter::default(),
     );
 
-    for (handle, _collider) in query_pipeline.intersect_shape(
-        pos, shape.as_ref(),
-    ) {
-        if count >= max_results { break; }
+    for (handle, _collider) in query_pipeline.intersect_shape(pos, shape.as_ref()) {
+        if count >= max_results {
+            break;
+        }
         arr[count as usize] = collider_handle_to_u64(handle);
         count += 1;
     }
@@ -2420,7 +2816,9 @@ pub unsafe extern "C" fn sge_phys_poll_contact_force_events(
 /// Requires ActiveEvents::CONTACT_FORCE_EVENTS to be set on the collider.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_set_contact_force_event_threshold(
-    world: *mut c_void, collider: u64, threshold: f32,
+    world: *mut c_void,
+    collider: u64,
+    threshold: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
@@ -2431,10 +2829,12 @@ pub unsafe extern "C" fn sge_phys_collider_set_contact_force_event_threshold(
 /// Gets the contact force event threshold for a collider.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_contact_force_event_threshold(
-    world: *mut c_void, collider: u64,
+    world: *mut c_void,
+    collider: u64,
 ) -> f32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider))
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
         .map(|c| c.contact_force_event_threshold())
         .unwrap_or(0.0)
 }
@@ -2449,7 +2849,9 @@ pub unsafe extern "C" fn sge_phys_collider_get_contact_force_event_threshold(
 /// Bit 0x04 = MODIFY_SOLVER_CONTACTS (required for one-way platforms)
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_set_active_hooks(
-    world: *mut c_void, collider: u64, flags: i32,
+    world: *mut c_void,
+    collider: u64,
+    flags: i32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
     if let Some(c) = w.collider_set.get_mut(u64_to_collider_handle(collider)) {
@@ -2460,10 +2862,12 @@ pub unsafe extern "C" fn sge_phys_collider_set_active_hooks(
 /// Gets the active hooks flags for a collider.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_active_hooks(
-    world: *mut c_void, collider: u64,
+    world: *mut c_void,
+    collider: u64,
 ) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
-    w.collider_set.get(u64_to_collider_handle(collider))
+    w.collider_set
+        .get(u64_to_collider_handle(collider))
         .map(|c| c.active_hooks().bits() as i32)
         .unwrap_or(0)
 }
@@ -2481,13 +2885,18 @@ pub unsafe extern "C" fn sge_phys_collider_get_active_hooks(
 /// via sge_phys_collider_set_active_hooks.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_set_one_way_direction(
-    world: *mut c_void, collider: u64, nx: f32, ny: f32, allowed_angle: f32,
+    world: *mut c_void,
+    collider: u64,
+    nx: f32,
+    ny: f32,
+    allowed_angle: f32,
 ) {
     let w = &mut *(world as *mut PhysicsWorld);
     if nx == 0.0 && ny == 0.0 {
         w.one_way_platforms.remove(&collider);
     } else {
-        w.one_way_platforms.insert(collider, ([nx, ny], allowed_angle));
+        w.one_way_platforms
+            .insert(collider, ([nx, ny], allowed_angle));
     }
 }
 
@@ -2495,8 +2904,11 @@ pub unsafe extern "C" fn sge_phys_collider_set_one_way_direction(
 /// If it does, fills out_nx, out_ny, out_angle with the configured direction and angle.
 #[no_mangle]
 pub unsafe extern "C" fn sge_phys_collider_get_one_way_direction(
-    world: *mut c_void, collider: u64,
-    out_nx: *mut f32, out_ny: *mut f32, out_angle: *mut f32,
+    world: *mut c_void,
+    collider: u64,
+    out_nx: *mut f32,
+    out_ny: *mut f32,
+    out_angle: *mut f32,
 ) -> i32 {
     let w = &*(world as *mut PhysicsWorld);
     if let Some(&(dir, angle)) = w.one_way_platforms.get(&collider) {
@@ -2591,14 +3003,11 @@ mod tests {
             assert!(
                 pos[1] < initial_y,
                 "body should have fallen: initial_y={}, final_y={}",
-                initial_y, pos[1]
+                initial_y,
+                pos[1]
             );
             // X should remain ~0
-            assert!(
-                pos[0].abs() < 1e-3,
-                "X should be near 0, got {}",
-                pos[0]
-            );
+            assert!(pos[0].abs() < 1e-3, "X should be near 0, got {}", pos[0]);
 
             sge_phys_destroy_world(world);
         }
@@ -2643,9 +3052,11 @@ mod tests {
             let mut out = [0.0f32; 9];
             let hit = sge_phys_ray_cast(
                 world,
-                0.0, 10.0,  // origin
-                0.0, -1.0,  // direction (down)
-                100.0,       // max distance
+                0.0,
+                10.0, // origin
+                0.0,
+                -1.0,  // direction (down)
+                100.0, // max distance
                 out.as_mut_ptr(),
             );
 
@@ -2688,9 +3099,11 @@ mod tests {
             let mut out = [0.0f32; 9];
             let hit = sge_phys_ray_cast(
                 world,
-                0.0, 0.0,  // origin
-                1.0, 0.0,  // direction (right)
-                10.0,       // max distance (only 10 units)
+                0.0,
+                0.0, // origin
+                1.0,
+                0.0,  // direction (right)
+                10.0, // max distance (only 10 units)
                 out.as_mut_ptr(),
             );
 
@@ -2754,11 +3167,19 @@ mod tests {
             let joint = sge_phys_create_rope_joint(world, b1, b2, 5.0);
 
             let max_dist = sge_phys_rope_joint_get_max_distance(world, joint);
-            assert!((max_dist - 5.0).abs() < 1e-5, "initial max dist should be 5.0, got {}", max_dist);
+            assert!(
+                (max_dist - 5.0).abs() < 1e-5,
+                "initial max dist should be 5.0, got {}",
+                max_dist
+            );
 
             sge_phys_rope_joint_set_max_distance(world, joint, 2.0);
             let max_dist = sge_phys_rope_joint_get_max_distance(world, joint);
-            assert!((max_dist - 2.0).abs() < 1e-5, "updated max dist should be 2.0, got {}", max_dist);
+            assert!(
+                (max_dist - 2.0).abs() < 1e-5,
+                "updated max dist should be 2.0, got {}",
+                max_dist
+            );
 
             sge_phys_destroy_world(world);
         }
@@ -2782,7 +3203,11 @@ mod tests {
             let mut out = [0.0f32; 9];
             let hit = sge_phys_ray_cast(world, 0.0, 5.0, 0.0, -1.0, 10.0, out.as_mut_ptr());
             assert_eq!(hit, 1, "ray should hit segment collider");
-            assert!((out[1]).abs() < 0.1, "hit Y should be near 0, got {}", out[1]);
+            assert!(
+                (out[1]).abs() < 0.1,
+                "hit Y should be near 0, got {}",
+                out[1]
+            );
 
             sge_phys_destroy_world(world);
         }
@@ -2798,9 +3223,7 @@ mod tests {
 
             // L-shaped polyline: (0,0) → (5,0) → (5,5)
             let vertices: [f32; 6] = [0.0, 0.0, 5.0, 0.0, 5.0, 5.0];
-            let _collider = sge_phys_create_polyline_collider(
-                world, body, vertices.as_ptr(), 3
-            );
+            let _collider = sge_phys_create_polyline_collider(world, body, vertices.as_ptr(), 3);
 
             // Step and raycast the horizontal segment
             sge_phys_world_step(world, 1.0 / 60.0);
@@ -2835,13 +3258,25 @@ mod tests {
             sge_phys_motor_joint_set_linear_offset(world, joint, 3.0, 2.0);
             let mut offset = [0.0f32; 2];
             sge_phys_motor_joint_get_linear_offset(world, joint, offset.as_mut_ptr());
-            assert!((offset[0] - 3.0).abs() < 1e-5, "x offset should be 3.0, got {}", offset[0]);
-            assert!((offset[1] - 2.0).abs() < 1e-5, "y offset should be 2.0, got {}", offset[1]);
+            assert!(
+                (offset[0] - 3.0).abs() < 1e-5,
+                "x offset should be 3.0, got {}",
+                offset[0]
+            );
+            assert!(
+                (offset[1] - 2.0).abs() < 1e-5,
+                "y offset should be 2.0, got {}",
+                offset[1]
+            );
 
             // Set angular offset
             sge_phys_motor_joint_set_angular_offset(world, joint, 1.5);
             let angle = sge_phys_motor_joint_get_angular_offset(world, joint);
-            assert!((angle - 1.5).abs() < 1e-5, "angular offset should be 1.5, got {}", angle);
+            assert!(
+                (angle - 1.5).abs() < 1e-5,
+                "angular offset should be 1.5, got {}",
+                angle
+            );
 
             sge_phys_destroy_world(world);
         }
@@ -2870,7 +3305,11 @@ mod tests {
 
             let mut out = [0.0f32; 10]; // room for 2 points × 5 floats
             let pts = sge_phys_contact_pair_points(world, c1, c2, out.as_mut_ptr(), 2);
-            assert!(pts > 0, "should return at least 1 contact point, got {}", pts);
+            assert!(
+                pts > 0,
+                "should return at least 1 contact point, got {}",
+                pts
+            );
 
             sge_phys_destroy_world(world);
         }

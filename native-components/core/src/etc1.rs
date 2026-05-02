@@ -41,14 +41,9 @@ pub const ETC_PKM_HEADER_SIZE: usize = 16;
 //       6                   -106 -33 33 106
 //       7                   -183 -47 47 183
 static K_MODIFIER_TABLE: [i32; 32] = [
-    /* 0 */ 2, 8, -2, -8,
-    /* 1 */ 5, 17, -5, -17,
-    /* 2 */ 9, 29, -9, -29,
-    /* 3 */ 13, 42, -13, -42,
-    /* 4 */ 18, 60, -18, -60,
-    /* 5 */ 24, 80, -24, -80,
-    /* 6 */ 33, 106, -33, -106,
-    /* 7 */ 47, 183, -47, -183,
+    /* 0 */ 2, 8, -2, -8, /* 1 */ 5, 17, -5, -17, /* 2 */ 9, 29, -9, -29,
+    /* 3 */ 13, 42, -13, -42, /* 4 */ 18, 60, -18, -60, /* 5 */ 24, 80, -24, -80,
+    /* 6 */ 33, 106, -33, -106, /* 7 */ 47, 183, -47, -183,
 ];
 
 static K_LOOKUP: [i32; 8] = [0, 1, 2, 3, -4, -3, -2, -1];
@@ -58,7 +53,11 @@ static K_LOOKUP: [i32; 8] = [0, 1, 2, 3, -4, -3, -2, -1];
 #[inline]
 fn clamp(x: i32) -> u8 {
     if x >= 0 {
-        if x < 255 { x as u8 } else { 255 }
+        if x < 255 {
+            x as u8
+        } else {
+            255
+        }
     } else {
         0
     }
@@ -152,14 +151,10 @@ fn decode_subblock(
 // Input is an ETC1 compressed version of the data.
 // Output is a 4 x 4 square of 3-byte pixels in form R, G, B
 fn decode_block(p_in: &[u8], p_out: &mut [u8]) {
-    let high: u32 = (p_in[0] as u32) << 24
-        | (p_in[1] as u32) << 16
-        | (p_in[2] as u32) << 8
-        | p_in[3] as u32;
-    let low: u32 = (p_in[4] as u32) << 24
-        | (p_in[5] as u32) << 16
-        | (p_in[6] as u32) << 8
-        | p_in[7] as u32;
+    let high: u32 =
+        (p_in[0] as u32) << 24 | (p_in[1] as u32) << 16 | (p_in[2] as u32) << 8 | p_in[3] as u32;
+    let low: u32 =
+        (p_in[4] as u32) << 24 | (p_in[5] as u32) << 16 | (p_in[6] as u32) << 8 | p_in[7] as u32;
 
     let (r1, r2, g1, g2, b1, b2);
     if high & 2 != 0 {
@@ -285,8 +280,7 @@ fn choose_modifier(
             best_index = i as i32;
         }
     }
-    let low_mask =
-        (((best_index >> 1) << 16) | (best_index & 1)) << bit_index;
+    let low_mask = (((best_index >> 1) << 16) | (best_index & 1)) << bit_index;
     *p_low |= low_mask as u32;
     best_score
 }
@@ -497,8 +491,16 @@ fn encode_block(p_in: &[u8], in_mask: u32, p_out: &mut [u8]) {
     etc_average_colors_subblock(p_in, in_mask, &mut flipped_colors[..3], true, false);
     etc_average_colors_subblock(p_in, in_mask, &mut flipped_colors[3..6], true, true);
 
-    let mut a = EtcCompressed { high: 0, low: 0, score: 0 };
-    let mut b = EtcCompressed { high: 0, low: 0, score: 0 };
+    let mut a = EtcCompressed {
+        high: 0,
+        low: 0,
+        score: 0,
+    };
+    let mut b = EtcCompressed {
+        high: 0,
+        low: 0,
+        score: 0,
+    };
     etc_encode_block_helper(p_in, in_mask, &colors, &mut a, false);
     etc_encode_block_helper(p_in, in_mask, &flipped_colors, &mut b, true);
     take_best(&mut a, &b);
@@ -575,8 +577,7 @@ pub fn encode_image(
                 }
             }
             encode_block(&block, mask as u32, &mut encoded);
-            output[out_offset..out_offset + ETC1_ENCODED_BLOCK_SIZE]
-                .copy_from_slice(&encoded);
+            output[out_offset..out_offset + ETC1_ENCODED_BLOCK_SIZE].copy_from_slice(&encoded);
             out_offset += ETC1_ENCODED_BLOCK_SIZE;
             x += 4;
         }
@@ -690,14 +691,8 @@ pub fn pkm_format_header(header: &mut [u8], width: u32, height: u32) {
     header[..6].copy_from_slice(&K_MAGIC);
     let encoded_width = (width + 3) & !3;
     let encoded_height = (height + 3) & !3;
-    write_be_uint16(
-        &mut header[ETC1_PKM_FORMAT_OFFSET..],
-        ETC1_RGB_NO_MIPMAPS,
-    );
-    write_be_uint16(
-        &mut header[ETC1_PKM_ENCODED_WIDTH_OFFSET..],
-        encoded_width,
-    );
+    write_be_uint16(&mut header[ETC1_PKM_FORMAT_OFFSET..], ETC1_RGB_NO_MIPMAPS);
+    write_be_uint16(&mut header[ETC1_PKM_ENCODED_WIDTH_OFFSET..], encoded_width);
     write_be_uint16(
         &mut header[ETC1_PKM_ENCODED_HEIGHT_OFFSET..],
         encoded_height,
@@ -762,11 +757,7 @@ pub unsafe extern "C" fn etc1_decode_block(p_in: *const u8, p_out: *mut u8) {
 /// whether the corresponding (x,y) pixel is valid.
 /// `p_out` is the ETC1 compressed output (8 bytes).
 #[no_mangle]
-pub unsafe extern "C" fn etc1_encode_block(
-    p_in: *const u8,
-    valid_pixel_mask: u32,
-    p_out: *mut u8,
-) {
+pub unsafe extern "C" fn etc1_encode_block(p_in: *const u8, valid_pixel_mask: u32, p_out: *mut u8) {
     let input = unsafe { core::slice::from_raw_parts(p_in, ETC1_DECODED_BLOCK_SIZE) };
     let output = unsafe { core::slice::from_raw_parts_mut(p_out, ETC1_ENCODED_BLOCK_SIZE) };
     encode_block(input, valid_pixel_mask, output);
@@ -828,7 +819,11 @@ pub unsafe extern "C" fn etc1_pkm_format_header(header: *mut u8, width: u32, hei
 #[no_mangle]
 pub unsafe extern "C" fn etc1_pkm_is_valid(header: *const u8) -> i32 {
     let h = unsafe { core::slice::from_raw_parts(header, ETC_PKM_HEADER_SIZE) };
-    if pkm_is_valid(h) { 1 } else { 0 }
+    if pkm_is_valid(h) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Read the image width from a PKM header.
@@ -930,9 +925,9 @@ mod tests {
             for x in 0..4 {
                 let idx = 3 * (x + 4 * y);
                 let v = ((x + y * 4) * 16) as u8;
-                input[idx] = v;         // R
-                input[idx + 1] = v / 2;  // G
-                input[idx + 2] = v / 3;  // B
+                input[idx] = v; // R
+                input[idx + 1] = v / 2; // G
+                input[idx + 2] = v / 3; // B
             }
         }
 
@@ -951,7 +946,10 @@ mod tests {
             assert!(
                 diff <= 40,
                 "pixel byte {} differs by {} (input={}, decoded={})",
-                i, diff, input[i], decoded[i]
+                i,
+                diff,
+                input[i],
+                decoded[i]
             );
         }
     }
@@ -961,8 +959,8 @@ mod tests {
         // Solid red block should compress well
         let mut input = [0u8; ETC1_DECODED_BLOCK_SIZE];
         for i in 0..16 {
-            input[i * 3] = 200;     // R
-            input[i * 3 + 1] = 50;  // G
+            input[i * 3] = 200; // R
+            input[i * 3 + 1] = 50; // G
             input[i * 3 + 2] = 100; // B
         }
 
@@ -980,7 +978,10 @@ mod tests {
             assert!(
                 dr <= 16 && dg <= 16 && db <= 16,
                 "pixel {} differs too much: dr={} dg={} db={}",
-                i, dr, dg, db
+                i,
+                dr,
+                dg,
+                db
             );
         }
     }
@@ -1000,8 +1001,8 @@ mod tests {
         for y in 0..height {
             for x in 0..width {
                 let idx = (pixel_size * x + stride * y) as usize;
-                input[idx] = (x * 32) as u8;         // R
-                input[idx + 1] = (y * 32) as u8;     // G
+                input[idx] = (x * 32) as u8; // R
+                input[idx + 1] = (y * 32) as u8; // G
                 input[idx + 2] = ((x + y) * 16) as u8; // B
             }
         }
@@ -1025,7 +1026,12 @@ mod tests {
                     assert!(
                         diff <= 80,
                         "pixel ({},{}) channel {} differs by {} (input={}, decoded={})",
-                        x, y, c, diff, input[idx + c], decoded[idx + c]
+                        x,
+                        y,
+                        c,
+                        diff,
+                        input[idx + c],
+                        decoded[idx + c]
                     );
                 }
             }
@@ -1082,7 +1088,10 @@ mod tests {
             assert!(
                 diff_r <= 4 && diff_g <= 8 && diff_b <= 4,
                 "pixel at byte {} differs too much in RGB565: dr={} dg={} db={}",
-                i, diff_r, diff_g, diff_b
+                i,
+                diff_r,
+                diff_g,
+                diff_b
             );
         }
     }
@@ -1120,7 +1129,12 @@ mod tests {
         for &(w, h) in &[(1u32, 1u32), (2, 3), (3, 1), (4, 4), (5, 7), (100, 100)] {
             let mut header = [0u8; ETC_PKM_HEADER_SIZE];
             pkm_format_header(&mut header, w, h);
-            assert!(pkm_is_valid(&header), "header should be valid for {}x{}", w, h);
+            assert!(
+                pkm_is_valid(&header),
+                "header should be valid for {}x{}",
+                w,
+                h
+            );
             assert_eq!(pkm_get_width(&header), w);
             assert_eq!(pkm_get_height(&header), h);
         }
@@ -1194,7 +1208,10 @@ mod tests {
 
         // ETC1 is lossy with high error on non-aligned dimensions; just verify
         // that the decoded output is not all zeros (sanity check).
-        assert!(decoded.iter().any(|&b| b != 0), "decoded data should not be all zeros");
+        assert!(
+            decoded.iter().any(|&b| b != 0),
+            "decoded data should not be all zeros"
+        );
     }
 
     #[test]
@@ -1257,12 +1274,22 @@ mod tests {
 
         unsafe {
             let result = etc1_encode_image(
-                input.as_ptr(), width, height, pixel_size, stride, encoded.as_mut_ptr(),
+                input.as_ptr(),
+                width,
+                height,
+                pixel_size,
+                stride,
+                encoded.as_mut_ptr(),
             );
             assert_eq!(result, 0);
 
             let result = etc1_decode_image(
-                encoded.as_ptr(), decoded.as_mut_ptr(), width, height, pixel_size, stride,
+                encoded.as_ptr(),
+                decoded.as_mut_ptr(),
+                width,
+                height,
+                pixel_size,
+                stride,
             );
             assert_eq!(result, 0);
         }
@@ -1335,9 +1362,20 @@ mod tests {
         for &(w, h) in &[(16u32, 16u32), (17, 33), (64, 48), (512, 512), (1, 4)] {
             let mut header = [0u8; ETC_PKM_HEADER_SIZE];
             pkm_format_header(&mut header, w, h);
-            assert!(pkm_is_valid(&header), "header should be valid for {}x{}", w, h);
+            assert!(
+                pkm_is_valid(&header),
+                "header should be valid for {}x{}",
+                w,
+                h
+            );
             assert_eq!(pkm_get_width(&header), w, "width mismatch for {}x{}", w, h);
-            assert_eq!(pkm_get_height(&header), h, "height mismatch for {}x{}", w, h);
+            assert_eq!(
+                pkm_get_height(&header),
+                h,
+                "height mismatch for {}x{}",
+                w,
+                h
+            );
         }
     }
 
@@ -1348,22 +1386,28 @@ mod tests {
         // A colorful block should produce non-zero encoded data
         let mut input = [0u8; ETC1_DECODED_BLOCK_SIZE];
         for i in 0..16 {
-            input[i * 3] = (i * 17) as u8;       // R ramp
+            input[i * 3] = (i * 17) as u8; // R ramp
             input[i * 3 + 1] = (255 - i * 17) as u8; // G inverse ramp
-            input[i * 3 + 2] = 128;               // B constant
+            input[i * 3 + 2] = 128; // B constant
         }
 
         let mut encoded = [0u8; ETC1_ENCODED_BLOCK_SIZE];
         encode_block(&input, 0xFFFF, &mut encoded);
 
         // Encoded data should not be all zeros
-        assert!(encoded.iter().any(|&b| b != 0), "encoded block should not be all zeros");
+        assert!(
+            encoded.iter().any(|&b| b != 0),
+            "encoded block should not be all zeros"
+        );
 
         let mut decoded = [0u8; ETC1_DECODED_BLOCK_SIZE];
         decode_block(&encoded, &mut decoded);
 
         // Decoded data should not be all zeros either
-        assert!(decoded.iter().any(|&b| b != 0), "decoded block should not be all zeros");
+        assert!(
+            decoded.iter().any(|&b| b != 0),
+            "decoded block should not be all zeros"
+        );
 
         // Check lossy quality: ETC1 can have high per-pixel error on steep
         // gradients, so we check overall average error is reasonable
@@ -1402,7 +1446,13 @@ mod tests {
         // Solid gray should have very low error
         for i in 0..img_size {
             let diff = (input[i] as i32 - decoded[i] as i32).unsigned_abs();
-            assert!(diff <= 16, "byte {} differs by {} (expected ~128, got {})", i, diff, decoded[i]);
+            assert!(
+                diff <= 16,
+                "byte {} differs by {} (expected ~128, got {})",
+                i,
+                diff,
+                decoded[i]
+            );
         }
     }
 }

@@ -67,10 +67,10 @@ pub fn transform_v4m4(
         let y = data[pos + 1];
         let z = data[pos + 2];
         let w = data[pos + 3];
-        data[pos]     = x * m[0]  + y * m[4]  + z * m[8]  + w * m[12];
-        data[pos + 1] = x * m[1]  + y * m[5]  + z * m[9]  + w * m[13];
-        data[pos + 2] = x * m[2]  + y * m[6]  + z * m[10] + w * m[14];
-        data[pos + 3] = x * m[3]  + y * m[7]  + z * m[11] + w * m[15];
+        data[pos] = x * m[0] + y * m[4] + z * m[8] + w * m[12];
+        data[pos + 1] = x * m[1] + y * m[5] + z * m[9] + w * m[13];
+        data[pos + 2] = x * m[2] + y * m[6] + z * m[10] + w * m[14];
+        data[pos + 3] = x * m[3] + y * m[7] + z * m[11] + w * m[15];
         pos += stride;
     }
 }
@@ -94,9 +94,9 @@ pub fn transform_v3m4(
         let x = data[pos];
         let y = data[pos + 1];
         let z = data[pos + 2];
-        data[pos]     = x * m[0]  + y * m[4]  + z * m[8]  + m[12];
-        data[pos + 1] = x * m[1]  + y * m[5]  + z * m[9]  + m[13];
-        data[pos + 2] = x * m[2]  + y * m[6]  + z * m[10] + m[14];
+        data[pos] = x * m[0] + y * m[4] + z * m[8] + m[12];
+        data[pos + 1] = x * m[1] + y * m[5] + z * m[9] + m[13];
+        data[pos + 2] = x * m[2] + y * m[6] + z * m[10] + m[14];
         pos += stride;
     }
 }
@@ -118,7 +118,7 @@ pub fn transform_v2m4(
     for _ in 0..count {
         let x = data[pos];
         let y = data[pos + 1];
-        data[pos]     = x * m[0] + y * m[4] + m[12];
+        data[pos] = x * m[0] + y * m[4] + m[12];
         data[pos + 1] = x * m[1] + y * m[5] + m[13];
         pos += stride;
     }
@@ -143,7 +143,7 @@ pub fn transform_v3m3(
         let x = data[pos];
         let y = data[pos + 1];
         let z = data[pos + 2];
-        data[pos]     = x * m[0] + y * m[3] + z * m[6];
+        data[pos] = x * m[0] + y * m[3] + z * m[6];
         data[pos + 1] = x * m[1] + y * m[4] + z * m[7];
         data[pos + 2] = x * m[2] + y * m[5] + z * m[8];
         pos += stride;
@@ -167,7 +167,7 @@ pub fn transform_v2m3(
     for _ in 0..count {
         let x = data[pos];
         let y = data[pos + 1];
-        data[pos]     = x * m[0] + y * m[3] + m[6];
+        data[pos] = x * m[0] + y * m[3] + m[6];
         data[pos + 1] = x * m[1] + y * m[4] + m[7];
         pos += stride;
     }
@@ -231,12 +231,7 @@ fn compare_epsilon(lhs: &[f32], rhs: &[f32], size: usize, epsilon: f32) -> bool 
 /// `count` is the number of vertices to search.
 ///
 /// Returns the 0-based index of the matching vertex, or -1 if not found.
-pub fn find_vertex(
-    vertex: &[f32],
-    stride: usize,
-    vertices: &[f32],
-    count: usize,
-) -> i64 {
+pub fn find_vertex(vertex: &[f32], stride: usize, vertices: &[f32], count: usize) -> i64 {
     let size = vertex.len();
     for i in 0..count {
         let base = i * stride;
@@ -655,8 +650,8 @@ mod tests {
         //   [ 4  8 12  16 ]
         // Column-major storage:
         let matrix: [f32; 16] = [
-            1.0, 2.0, 3.0, 4.0,   // col 0
-            5.0, 6.0, 7.0, 8.0,   // col 1
+            1.0, 2.0, 3.0, 4.0, // col 0
+            5.0, 6.0, 7.0, 8.0, // col 1
             9.0, 10.0, 11.0, 12.0, // col 2
             13.0, 14.0, 15.0, 16.0, // col 3
         ];
@@ -675,10 +670,7 @@ mod tests {
         // Stride of 5 floats: [x, y, z, u, v] per vertex
         // Translation by (10, 20, 30)
         let matrix: [f32; 16] = [
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            10.0, 20.0, 30.0, 1.0,
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 10.0, 20.0, 30.0, 1.0,
         ];
         let mut data = vec![
             1.0, 2.0, 3.0, 0.5, 0.5, // vertex 0: pos + uv
@@ -723,7 +715,7 @@ mod tests {
         assert_eq!(data[1], 5.0);
         assert_eq!(data[2], 0.5); // untouched
         assert_eq!(data[3], 0.5); // untouched
-        // vertex 1: x'=2*2+2*0+1=5, y'=2*0+2*3+2=8
+                                  // vertex 1: x'=2*2+2*0+1=5, y'=2*0+2*3+2=8
         assert_eq!(data[4], 5.0);
         assert_eq!(data[5], 8.0);
         assert_eq!(data[6], 0.7);
@@ -734,10 +726,7 @@ mod tests {
     fn transform_with_offset() {
         // Start at offset 2 (skip first 2 floats)
         let matrix: [f32; 16] = [
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            10.0, 20.0, 30.0, 1.0,
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 10.0, 20.0, 30.0, 1.0,
         ];
         let mut data = vec![99.0, 99.0, 1.0, 2.0, 3.0];
         transform_v3m4(&mut data, 3, 1, &matrix, 2);
@@ -763,10 +752,7 @@ mod tests {
 
     #[test]
     fn find_vertex_not_found() {
-        let vertices: Vec<f32> = vec![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-        ];
+        let vertices: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let needle = vec![7.0, 8.0, 9.0];
         assert_eq!(find_vertex(&needle, 3, &vertices, 2), -1);
     }
@@ -795,10 +781,7 @@ mod tests {
 
     #[test]
     fn find_vertex_epsilon_within_tolerance() {
-        let vertices: Vec<f32> = vec![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-        ];
+        let vertices: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         // Slightly off from vertex 1
         let needle = vec![4.001, 4.999, 6.0005];
         assert_eq!(find_vertex_epsilon(&needle, 3, &vertices, 2, 0.01), 1);
@@ -806,10 +789,7 @@ mod tests {
 
     #[test]
     fn find_vertex_epsilon_outside_tolerance() {
-        let vertices: Vec<f32> = vec![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-        ];
+        let vertices: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         // Too far from any vertex
         let needle = vec![4.1, 5.0, 6.0];
         assert_eq!(find_vertex_epsilon(&needle, 3, &vertices, 2, 0.01), -1);
@@ -885,10 +865,10 @@ mod tests {
     fn transform_v4m4_translation_matrix() {
         // Column-major 4x4 translation: tx=5, ty=10, tz=15
         let matrix: [f32; 16] = [
-            1.0, 0.0, 0.0, 0.0,   // col 0
-            0.0, 1.0, 0.0, 0.0,   // col 1
-            0.0, 0.0, 1.0, 0.0,   // col 2
-            5.0, 10.0, 15.0, 1.0,  // col 3
+            1.0, 0.0, 0.0, 0.0, // col 0
+            0.0, 1.0, 0.0, 0.0, // col 1
+            0.0, 0.0, 1.0, 0.0, // col 2
+            5.0, 10.0, 15.0, 1.0, // col 3
         ];
         let mut data = vec![1.0, 2.0, 3.0, 1.0]; // w=1 for translation to apply
         transform_v4m4(&mut data, 4, 1, &matrix, 0);
@@ -909,8 +889,8 @@ mod tests {
         // [0 0  1]
         // col0=[1,0,0], col1=[0,1,0], col2=[10,20,1]
         let matrix: [f32; 9] = [
-            1.0, 0.0, 0.0,  // col 0
-            0.0, 1.0, 0.0,  // col 1
+            1.0, 0.0, 0.0, // col 0
+            0.0, 1.0, 0.0, // col 1
             10.0, 20.0, 1.0, // col 2
         ];
         let mut data = vec![3.0, 7.0];
@@ -948,11 +928,7 @@ mod tests {
 
     #[test]
     fn find_vertex_no_match_returns_minus_one() {
-        let vertices: Vec<f32> = vec![
-            1.0, 1.0,
-            2.0, 2.0,
-            3.0, 3.0,
-        ];
+        let vertices: Vec<f32> = vec![1.0, 1.0, 2.0, 2.0, 3.0, 3.0];
         let needle = vec![4.0, 4.0];
         assert_eq!(find_vertex(&needle, 2, &vertices, 3), -1);
     }
@@ -961,10 +937,7 @@ mod tests {
 
     #[test]
     fn find_vertex_epsilon_within_tolerance_found() {
-        let vertices: Vec<f32> = vec![
-            1.0, 2.0, 3.0,
-            10.0, 20.0, 30.0,
-        ];
+        let vertices: Vec<f32> = vec![1.0, 2.0, 3.0, 10.0, 20.0, 30.0];
         // Slightly off from vertex 1
         let needle = vec![10.05, 19.95, 30.01];
         assert_eq!(find_vertex_epsilon(&needle, 3, &vertices, 2, 0.1), 1);
@@ -972,10 +945,7 @@ mod tests {
 
     #[test]
     fn find_vertex_epsilon_outside_tolerance_not_found() {
-        let vertices: Vec<f32> = vec![
-            1.0, 2.0, 3.0,
-            10.0, 20.0, 30.0,
-        ];
+        let vertices: Vec<f32> = vec![1.0, 2.0, 3.0, 10.0, 20.0, 30.0];
         // One component is too far off
         let needle = vec![10.0, 20.5, 30.0];
         assert_eq!(find_vertex_epsilon(&needle, 3, &vertices, 2, 0.1), -1);

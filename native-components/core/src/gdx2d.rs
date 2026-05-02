@@ -102,9 +102,7 @@ pub unsafe extern "C" fn sge_image_decode(
         set_error("Null data pointer or non-positive length".to_string());
         return std::ptr::null_mut();
     }
-    let slice = unsafe {
-        core::slice::from_raw_parts(data.add(offset as usize), len as usize)
-    };
+    let slice = unsafe { core::slice::from_raw_parts(data.add(offset as usize), len as usize) };
     match decode_image(slice) {
         Some(result) => Box::into_raw(result),
         None => std::ptr::null_mut(),
@@ -123,7 +121,11 @@ pub unsafe extern "C" fn sge_image_free(result: *mut SgeImageResult) {
         if !boxed.pixels.is_null() && boxed.pixel_size > 0 {
             // Reconstruct the Vec to free the pixel data
             let _ = unsafe {
-                Vec::from_raw_parts(boxed.pixels, boxed.pixel_size as usize, boxed.pixel_size as usize)
+                Vec::from_raw_parts(
+                    boxed.pixels,
+                    boxed.pixel_size as usize,
+                    boxed.pixel_size as usize,
+                )
             };
         }
         // boxed is dropped here, freeing the SgeImageResult struct
@@ -149,9 +151,8 @@ pub unsafe extern "C" fn sge_image_failure() -> *const libc::c_char {
             );
         }
         BUF.with(|buf| {
-            *buf.borrow_mut() = std::ffi::CString::new(s.as_str()).unwrap_or_else(|_| {
-                std::ffi::CString::new("Unknown error").unwrap()
-            });
+            *buf.borrow_mut() = std::ffi::CString::new(s.as_str())
+                .unwrap_or_else(|_| std::ffi::CString::new("Unknown error").unwrap());
             buf.borrow().as_ptr()
         })
     })
@@ -184,11 +185,14 @@ mod tests {
         let mut png_data = Vec::new();
         let encoder = image::codecs::png::PngEncoder::new(&mut png_data);
         use image::ImageEncoder;
-        encoder.write_image(
-            &[255, 0, 0, 255], // RGBA red pixel
-            1, 1,
-            image::ExtendedColorType::Rgba8,
-        ).unwrap();
+        encoder
+            .write_image(
+                &[255, 0, 0, 255], // RGBA red pixel
+                1,
+                1,
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap();
         png_data
     }
 
@@ -204,8 +208,8 @@ mod tests {
         // Check pixel data
         let pixels = unsafe { core::slice::from_raw_parts(result.pixels, 4) };
         assert_eq!(pixels[0], 255); // R
-        assert_eq!(pixels[1], 0);   // G
-        assert_eq!(pixels[2], 0);   // B
+        assert_eq!(pixels[1], 0); // G
+        assert_eq!(pixels[2], 0); // B
         assert_eq!(pixels[3], 255); // A
 
         // Clean up
