@@ -11,3 +11,6 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 # FreeType bindings (vendored C source — no system dependency)
 freetype = { version = "0.7", features = ["freetype-sys"] }
+
+[lints]
+workspace = true

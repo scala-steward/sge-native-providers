@@ -11,3 +11,6 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 rapier3d = "0.32"
 crossbeam = "0.8"
+
+[lints]
+workspace = true

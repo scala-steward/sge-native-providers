@@ -13,6 +13,26 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 
+[workspace.lints.clippy]
+# FFI-specific: inherent to C ABI libraries with no Rust callers
+missing_safety_doc = "allow"
+too_many_arguments = "allow"
+unnecessary_cast = "allow"
+
+# Pedantic lints worth catching
+manual_range_contains = "warn"
+needless_pass_by_value = "warn"
+redundant_closure = "warn"
+
+# Pedantic lints that are pure noise for FFI code
+cast_sign_loss = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_lossless = "allow"
+ptr_cast_constness = "allow"
+must_use_candidate = "allow"
+module_name_repetitions = "allow"
+
 # Snapshot builds: fast compile, correct behavior, suitable for CI verification.
 # Use: cargo build --profile ci
 [profile.ci]

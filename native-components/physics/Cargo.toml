@@ -12,3 +12,6 @@ crate-type = ["cdylib", "staticlib"]
 # 2D physics engine (pure Rust — cross-compiles to all targets)
 rapier2d = "0.32"
 crossbeam = "0.8"
+
+[lints]
+workspace = true

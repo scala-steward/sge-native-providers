@@ -21,3 +21,6 @@ cc = "1"
 default = ["image_decode"]
 # Image decoding via pure-Rust `image` crate (PNG, JPEG, BMP)
 image_decode = ["image"]
+
+[lints]
+workspace = true
