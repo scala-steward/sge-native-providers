@@ -1,15 +1,9 @@
+import kubuszok.sbt._
+import kubuszok.sbt.KubuszokPlugin.autoImport._
 import multiarch.core.Platform
 
-lazy val isCI = sys.env.get("CI").contains("true")
-ThisBuild / packageDoc / publishArtifact := false
 
-// Version from git tags
-ThisBuild / git.useGitDescribe       := true
-ThisBuild / git.uncommittedSignifier := Some("SNAPSHOT")
-ThisBuild / git.gitUncommittedChanges := git.gitCurrentTags.value.isEmpty
 
-// Used to publish snapshots to Maven Central.
-val mavenCentralSnapshots = "Maven Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots"
 
 val publishSettings = Seq(
   organization := "com.kubuszok",
@@ -32,20 +26,11 @@ val publishSettings = Seq(
       <url>https://github.com/kubuszok/sge-native-providers/issues</url>
     </issueManagement>
   ),
-  publishTo := {
-    if (isSnapshot.value) Some(mavenCentralSnapshots)
-    else localStaging.value
-  },
-  publishMavenStyle := true,
-  Test / publishArtifact := false,
-  pomIncludeRepository := { _ =>
-    false
-  },
-  versionScheme := Some("early-semver")
+  projectType := ProjectType.ScalaLibrary
 )
 
 val noPublishSettings =
-  Seq(publish / skip := true, publishArtifact := false)
+  Seq(projectType := ProjectType.NonPublished)
 
 // ── Shared helpers ────────────────────────────────────────────────────
 
@@ -104,12 +89,6 @@ lazy val root = project
   )
   .settings(
     name := "sge-native-providers-root",
-    commands += Command.command("ci-release") { state =>
-      val extracted = Project.extract(state)
-      val tags      = extracted.get(git.gitCurrentTags)
-      if (tags.nonEmpty) "publishSigned" :: "sonaRelease" :: state
-      else "publishSigned" :: state
-    }
   )
 
 // ── SGE core native ops (sge_native_ops + sge_audio + glfw3) ─────────
