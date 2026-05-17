@@ -47,14 +47,9 @@ def fatJarMappings(crossRoot: File, platforms: Seq[Platform], fileFilter: String
     else Seq.empty
   }
 
-/** Create fat JAR mappings for android: reads from Cargo target/<rustTarget>/release/ */
-def androidJarMappings(base: File, platforms: Seq[Platform], fileFilter: String => Boolean): Seq[(File, String)] =
-  platforms.flatMap { p =>
-    val dir = base / p.rustTarget / "release"
-    if (dir.exists())
-      sbt.IO.listFiles(dir).filter(f => f.isFile && fileFilter(f.getName)).map(f => f -> s"native/${p.classifier}/${f.getName}").toSeq
-    else Seq.empty
-  }
+/** Create fat JAR mappings for android: reads from cross-compilation output (same as desktop). */
+def androidJarMappings(crossRoot: File, platforms: Seq[Platform], fileFilter: String => Boolean): Seq[(File, String)] =
+  fatJarMappings(crossRoot, platforms, fileFilter)
 
 // Common provider settings
 val providerSettings = Seq(
@@ -148,9 +143,9 @@ lazy val `pnm-provider-sge-android` = project
   .settings(
     name := "pnm-provider-sge-android",
     Compile / packageBin / mappings ++= {
-      val base = (ThisBuild / baseDirectory).value / "native-components" / "target"
+      val cross = crossDir.value
       val libs = Set("libsge_native_ops.so", "libsge_audio.so")
-      androidJarMappings(base, Platform.android, libs.contains)
+      androidJarMappings(cross, Platform.android, libs.contains)
     }
   )
 
@@ -189,9 +184,9 @@ lazy val `pnm-provider-sge-freetype-android` = project
   .settings(
     name := "pnm-provider-sge-freetype-android",
     Compile / packageBin / mappings ++= {
-      val base = (ThisBuild / baseDirectory).value / "native-components" / "target"
+      val cross = crossDir.value
       val libs = Set("libsge_freetype.so")
-      androidJarMappings(base, Platform.android, libs.contains)
+      androidJarMappings(cross, Platform.android, libs.contains)
     }
   )
 
@@ -230,9 +225,9 @@ lazy val `pnm-provider-sge-physics-android` = project
   .settings(
     name := "pnm-provider-sge-physics-android",
     Compile / packageBin / mappings ++= {
-      val base = (ThisBuild / baseDirectory).value / "native-components" / "target"
+      val cross = crossDir.value
       val libs = Set("libsge_physics.so")
-      androidJarMappings(base, Platform.android, libs.contains)
+      androidJarMappings(cross, Platform.android, libs.contains)
     }
   )
 
@@ -271,9 +266,9 @@ lazy val `pnm-provider-sge-physics3d-android` = project
   .settings(
     name := "pnm-provider-sge-physics3d-android",
     Compile / packageBin / mappings ++= {
-      val base = (ThisBuild / baseDirectory).value / "native-components" / "target"
+      val cross = crossDir.value
       val libs = Set("libsge_physics3d.so")
-      androidJarMappings(base, Platform.android, libs.contains)
+      androidJarMappings(cross, Platform.android, libs.contains)
     }
   )
 
