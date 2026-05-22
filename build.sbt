@@ -3,8 +3,6 @@ import kubuszok.sbt.KubuszokPlugin.autoImport._
 import sbtwelcome.UsefulTask
 import multiarch.core.Platform
 
-ThisBuild / packageDoc / publishArtifact := false
-
 val publishSettings = Seq(
   organization := "com.kubuszok",
   homepage := Some(url("https://github.com/kubuszok/sge-native-providers")),
@@ -31,6 +29,12 @@ val publishSettings = Seq(
 
 val noPublishSettings =
   Seq(projectType := ProjectType.NonPublished)
+
+val mimaSettings = Seq(
+  mimaPreviousArtifacts := Set(),
+  mimaFailOnNoPrevious := false,
+  packageDoc / publishArtifact := false
+)
 
 // ── Shared helpers ────────────────────────────────────────────────────
 
@@ -64,23 +68,26 @@ val providerSettings = Seq(
 lazy val root = project
   .in(file("."))
   .enablePlugins(KubuszokRootPlugin)
-  .settings(publishSettings *)
-  .settings(noPublishSettings *)
   .aggregate(
-    `sn-provider-sge`,
-    `pnm-provider-sge-desktop`,
-    `pnm-provider-sge-android`,
-    `sn-provider-sge-freetype`,
-    `pnm-provider-sge-freetype-desktop`,
-    `pnm-provider-sge-freetype-android`,
-    `sn-provider-sge-physics`,
-    `pnm-provider-sge-physics-desktop`,
-    `pnm-provider-sge-physics-android`,
-    `sn-provider-sge-physics3d`,
-    `pnm-provider-sge-physics3d-desktop`,
-    `pnm-provider-sge-physics3d-android`,
+    // ANGLE
+    `pnm-provider-sge-angle`,
     `sn-provider-sge-angle`,
-    `pnm-provider-sge-angle`
+    // Core
+    `pnm-provider-sge-android`,
+    `pnm-provider-sge-desktop`,
+    `sn-provider-sge`,
+    // FreeType
+    `pnm-provider-sge-freetype-android`,
+    `pnm-provider-sge-freetype-desktop`,
+    `sn-provider-sge-freetype`,
+    // Physics 2D
+    `pnm-provider-sge-physics-android`,
+    `pnm-provider-sge-physics-desktop`,
+    `sn-provider-sge-physics`,
+    // Physics 3D
+    `pnm-provider-sge-physics3d-android`,
+    `pnm-provider-sge-physics3d-desktop`,
+    `sn-provider-sge-physics3d`
   )
   .settings(
     name := "sge-native-providers-root",
@@ -91,36 +98,68 @@ lazy val root = project
       UsefulTask("ci-release", "Publish snapshot or release (based on git tags)").noAlias
     )
   )
+  .settings(noPublishSettings)
+  .settings(mimaSettings)
 
-// ── SGE core native ops (sge_native_ops + sge_audio + glfw3) ─────────
-// Depends on angle transitively so pulling sn-provider-sge pulls everything.
+// ── ANGLE (EGL + GLESv2) ──────────────────────────────────────────────
 
-lazy val `sn-provider-sge` = project
-  .in(file("providers/sn-provider-sge"))
-  .dependsOn(`sn-provider-sge-angle`)
-  .settings(publishSettings *)
+lazy val `pnm-provider-sge-angle` = project
+  .in(file("providers/pnm-provider-sge-angle"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "sn-provider-sge",
+    name := "pnm-provider-sge-angle",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
       val libs = Set(
-        "libsge_native_ops.a", "sge_native_ops.lib",
-        "libsge_audio.a",
-        "libglfw3.a",
-        // Windows companion .lib stubs
-        "sge_audio.lib", "glfw3.lib", "glfw.lib",
-        // libobjc stubs for Linux/Windows (for @link("objc") in Scala Native)
-        "libobjc.a", "objc.lib"
+        "libEGL.dylib", "libEGL.so", "libEGL.dll",
+        "libGLESv2.dylib", "libGLESv2.so", "libGLESv2.dll",
+        "EGL.lib", "GLESv2.lib"
       )
       fatJarMappings(cross, Platform.desktop, libs.contains)
+    }
+  )
+
+lazy val `sn-provider-sge-angle` = project
+  .in(file("providers/sn-provider-sge-angle"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
+  .settings(providerSettings *)
+  .settings(
+    name := "sn-provider-sge-angle",
+    Compile / packageBin / mappings ++= {
+      val cross = crossDir.value
+      val libs = Set(
+        "libEGL.dylib", "libEGL.so", "libEGL.dll",
+        "libGLESv2.dylib", "libGLESv2.so", "libGLESv2.dll",
+        "EGL.lib", "GLESv2.lib"
+      )
+      fatJarMappings(cross, Platform.desktop, libs.contains)
+    }
+  )
+
+// ── SGE core native ops (sge_native_ops + sge_audio + glfw3) ─────────
+
+lazy val `pnm-provider-sge-android` = project
+  .in(file("providers/pnm-provider-sge-android"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
+  .settings(providerSettings *)
+  .settings(
+    name := "pnm-provider-sge-android",
+    Compile / packageBin / mappings ++= {
+      val cross = crossDir.value
+      val libs = Set("libsge_native_ops.so", "libsge_audio.so")
+      androidJarMappings(cross, Platform.android, libs.contains)
     }
   )
 
 lazy val `pnm-provider-sge-desktop` = project
   .in(file("providers/pnm-provider-sge-desktop"))
   .dependsOn(`pnm-provider-sge-angle`)
-  .settings(publishSettings *)
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
     name := "pnm-provider-sge-desktop",
@@ -136,50 +175,33 @@ lazy val `pnm-provider-sge-desktop` = project
     }
   )
 
-lazy val `pnm-provider-sge-android` = project
-  .in(file("providers/pnm-provider-sge-android"))
-  .settings(publishSettings *)
+lazy val `sn-provider-sge` = project
+  .in(file("providers/sn-provider-sge"))
+  .dependsOn(`sn-provider-sge-angle`)
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "pnm-provider-sge-android",
+    name := "sn-provider-sge",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
-      val libs = Set("libsge_native_ops.so", "libsge_audio.so")
-      androidJarMappings(cross, Platform.android, libs.contains)
+      val libs = Set(
+        "libsge_native_ops.a", "sge_native_ops.lib",
+        "libsge_audio.a",
+        "libglfw3.a",
+        "sge_audio.lib", "glfw3.lib", "glfw.lib",
+        "libobjc.a", "objc.lib"
+      )
+      fatJarMappings(cross, Platform.desktop, libs.contains)
     }
   )
 
 // ── FreeType (sge_freetype + libfreetype) ─────────────────────────────
 
-lazy val `sn-provider-sge-freetype` = project
-  .in(file("providers/sn-provider-sge-freetype"))
-  .settings(publishSettings *)
-  .settings(providerSettings *)
-  .settings(
-    name := "sn-provider-sge-freetype",
-    Compile / packageBin / mappings ++= {
-      val cross = crossDir.value
-      val libs = Set("libsge_freetype.a", "sge_freetype.lib", "libfreetype.a")
-      fatJarMappings(cross, Platform.desktop, libs.contains)
-    }
-  )
-
-lazy val `pnm-provider-sge-freetype-desktop` = project
-  .in(file("providers/pnm-provider-sge-freetype-desktop"))
-  .settings(publishSettings *)
-  .settings(providerSettings *)
-  .settings(
-    name := "pnm-provider-sge-freetype-desktop",
-    Compile / packageBin / mappings ++= {
-      val cross = crossDir.value
-      val libs = Set("libsge_freetype.dylib", "libsge_freetype.so", "sge_freetype.dll")
-      fatJarMappings(cross, Platform.desktop, libs.contains)
-    }
-  )
-
 lazy val `pnm-provider-sge-freetype-android` = project
   .in(file("providers/pnm-provider-sge-freetype-android"))
-  .settings(publishSettings *)
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
     name := "pnm-provider-sge-freetype-android",
@@ -190,37 +212,40 @@ lazy val `pnm-provider-sge-freetype-android` = project
     }
   )
 
-// ── Physics (sge_physics via Rapier2D) ────────────────────────────────
-
-lazy val `sn-provider-sge-physics` = project
-  .in(file("providers/sn-provider-sge-physics"))
-  .settings(publishSettings *)
+lazy val `pnm-provider-sge-freetype-desktop` = project
+  .in(file("providers/pnm-provider-sge-freetype-desktop"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "sn-provider-sge-physics",
+    name := "pnm-provider-sge-freetype-desktop",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
-      val libs = Set("libsge_physics.a", "sge_physics.lib")
+      val libs = Set("libsge_freetype.dylib", "libsge_freetype.so", "sge_freetype.dll")
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
   )
 
-lazy val `pnm-provider-sge-physics-desktop` = project
-  .in(file("providers/pnm-provider-sge-physics-desktop"))
-  .settings(publishSettings *)
+lazy val `sn-provider-sge-freetype` = project
+  .in(file("providers/sn-provider-sge-freetype"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "pnm-provider-sge-physics-desktop",
+    name := "sn-provider-sge-freetype",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
-      val libs = Set("libsge_physics.dylib", "libsge_physics.so", "sge_physics.dll")
+      val libs = Set("libsge_freetype.a", "sge_freetype.lib", "libfreetype.a")
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
   )
+
+// ── Physics 2D (sge_physics via Rapier2D) ────────────────────────────
 
 lazy val `pnm-provider-sge-physics-android` = project
   .in(file("providers/pnm-provider-sge-physics-android"))
-  .settings(publishSettings *)
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
     name := "pnm-provider-sge-physics-android",
@@ -231,37 +256,40 @@ lazy val `pnm-provider-sge-physics-android` = project
     }
   )
 
-// ── Physics3D (sge_physics3d via Rapier3D) ───────────────────────────
-
-lazy val `sn-provider-sge-physics3d` = project
-  .in(file("providers/sn-provider-sge-physics3d"))
-  .settings(publishSettings *)
+lazy val `pnm-provider-sge-physics-desktop` = project
+  .in(file("providers/pnm-provider-sge-physics-desktop"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "sn-provider-sge-physics3d",
+    name := "pnm-provider-sge-physics-desktop",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
-      val libs = Set("libsge_physics3d.a", "sge_physics3d.lib")
+      val libs = Set("libsge_physics.dylib", "libsge_physics.so", "sge_physics.dll")
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
   )
 
-lazy val `pnm-provider-sge-physics3d-desktop` = project
-  .in(file("providers/pnm-provider-sge-physics3d-desktop"))
-  .settings(publishSettings *)
+lazy val `sn-provider-sge-physics` = project
+  .in(file("providers/sn-provider-sge-physics"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "pnm-provider-sge-physics3d-desktop",
+    name := "sn-provider-sge-physics",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
-      val libs = Set("libsge_physics3d.dylib", "libsge_physics3d.so", "sge_physics3d.dll")
+      val libs = Set("libsge_physics.a", "sge_physics.lib")
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
   )
+
+// ── Physics 3D (sge_physics3d via Rapier3D) ──────────────────────────
 
 lazy val `pnm-provider-sge-physics3d-android` = project
   .in(file("providers/pnm-provider-sge-physics3d-android"))
-  .settings(publishSettings *)
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
     name := "pnm-provider-sge-physics3d-android",
@@ -272,40 +300,30 @@ lazy val `pnm-provider-sge-physics3d-android` = project
     }
   )
 
-// ── ANGLE (EGL + GLESv2) ──────────────────────────────────────────────
-
-lazy val `sn-provider-sge-angle` = project
-  .in(file("providers/sn-provider-sge-angle"))
-  .settings(publishSettings *)
+lazy val `pnm-provider-sge-physics3d-desktop` = project
+  .in(file("providers/pnm-provider-sge-physics3d-desktop"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "sn-provider-sge-angle",
+    name := "pnm-provider-sge-physics3d-desktop",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
-      val libs = Set(
-        "libEGL.dylib", "libEGL.so", "libEGL.dll",
-        "libGLESv2.dylib", "libGLESv2.so", "libGLESv2.dll",
-        // Windows import libraries (renamed from .dll.lib by download-angle.sh)
-        "EGL.lib", "GLESv2.lib"
-      )
+      val libs = Set("libsge_physics3d.dylib", "libsge_physics3d.so", "sge_physics3d.dll")
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
   )
 
-lazy val `pnm-provider-sge-angle` = project
-  .in(file("providers/pnm-provider-sge-angle"))
-  .settings(publishSettings *)
+lazy val `sn-provider-sge-physics3d` = project
+  .in(file("providers/sn-provider-sge-physics3d"))
+  .settings(publishSettings)
+  .settings(mimaSettings)
   .settings(providerSettings *)
   .settings(
-    name := "pnm-provider-sge-angle",
+    name := "sn-provider-sge-physics3d",
     Compile / packageBin / mappings ++= {
       val cross = crossDir.value
-      val libs = Set(
-        "libEGL.dylib", "libEGL.so", "libEGL.dll",
-        "libGLESv2.dylib", "libGLESv2.so", "libGLESv2.dll",
-        // Windows import libraries (renamed from .dll.lib by download-angle.sh)
-        "EGL.lib", "GLESv2.lib"
-      )
+      val libs = Set("libsge_physics3d.a", "sge_physics3d.lib")
       fatJarMappings(cross, Platform.desktop, libs.contains)
     }
   )
