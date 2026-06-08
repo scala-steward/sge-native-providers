@@ -16,7 +16,7 @@ jobs:
     name: Clippy + format check
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: true
 
@@ -46,7 +46,7 @@ jobs:
     name: Build native components + package JARs
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: true
