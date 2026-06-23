@@ -540,26 +540,34 @@ fn link_system_libs(target_os: &str) {
 /// input file) and re-listed under `/wholearchive:` so every export survives.
 fn windows_cross_lld_link(target: &str, dll_output: &str, archive: &str) -> std::process::Command {
     let _ = target; // clang-cl already carries --target=<triple> via cc's args.
-                    // clang-cl's driver only recognises `.lib`/`.obj` as linker inputs — a Unix
-                    // `.a` archive is silently dropped, yielding "clang-cl: error: no input files".
-                    // Copy the archive next to itself with a `.lib` name and feed clang-cl that.
+    let p = std::path::Path::new(archive);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("input");
+    // clang-cl's driver only recognises `.lib`/`.obj` as linker inputs — a Unix `.a`
+    // archive is silently dropped. Copy it to a `.lib` name and feed clang-cl that.
     let lib_input = {
-        let p = std::path::Path::new(archive);
-        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("input");
         let lib = p.with_file_name(format!("{}.lib", stem));
         std::fs::copy(archive, &lib)
             .unwrap_or_else(|e| panic!("Failed to copy {} -> {:?}: {}", archive, lib, e));
         lib.to_string_lossy().into_owned()
+    };
+    // clang-cl `/LD` is a *compile-and-link* mode: with only libraries it reports
+    // "no input files". Give it a trivial translation unit to compile so the driver
+    // runs, then link our whole archive + the full DLL CRT it pulls in automatically.
+    let dummy_c = {
+        let c = p.with_file_name(format!("{}_dllmain.c", stem));
+        std::fs::write(&c, b"/* clang-cl /LD compile input; real code is in the archive */\nint _sge_dll_anchor = 0;\n")
+            .unwrap_or_else(|e| panic!("Failed to write {:?}: {}", c, e));
+        c.to_string_lossy().into_owned()
     };
     let cc_tool = cc::Build::new().get_compiler();
     let mut cmd = std::process::Command::new(cc_tool.path());
     // Carry clang-cl's own args (the xwin --target/winsysroot/imsvc flags).
     cmd.args(cc_tool.args());
     // /LD = build a DLL (links the DLL CRT entry point + startup), /Fe<out> names it.
-    // The `.lib` archive is BOTH a positional input (so clang-cl's driver has an input
-    // file) and a /wholearchive entry (so all sge_audio_*/glfw* exports are kept).
+    // The dummy .c is the compile input; the .lib is whole-archived so every
+    // sge_audio_*/glfw* export survives.
     cmd.arg("/LD")
-        .arg(&lib_input)
+        .arg(&dummy_c)
         .arg(format!("/Fe:{}", dll_output))
         .arg("-link")
         .arg("/force:multiple")
