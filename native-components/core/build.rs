@@ -225,49 +225,9 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
             let is_cross = target != host && !target.is_empty();
             if is_cross {
                 let dll_output = format!("{}/sge_audio.dll", release_dir);
-                let arch = if target.contains("aarch64") {
-                    "arm64"
-                } else {
-                    "x86_64"
-                };
-                // Find xwin cache dir (cargo-xwin downloads Windows SDK here)
-                let home = std::env::var("HOME").unwrap_or_default();
-                let xwin_cache = format!("{}/.cache/cargo-xwin/xwin", home);
-                // Fallback to Library/Caches on macOS
-                let xwin_dir = if std::path::Path::new(&xwin_cache).exists() {
-                    xwin_cache
-                } else {
-                    format!("{}/Library/Caches/cargo-xwin/xwin", home)
-                };
-                // cargo-xwin's arm64 SDK import libs are ARM64EC-flavoured (lld-link
-                // reports "machine type arm64ec conflicts with arm64" if we force
-                // /machine:arm64). Build a hybrid ARM64X image, which accepts both the
-                // arm64 objects from our archive and the arm64ec imports, and is
-                // loadable by native ARM64 Windows processes. (Real Homebrew lld-link
-                // resolves the EC CRT from these libs; rustup's rust-lld crashed here.)
-                let machine = if target.contains("aarch64") {
-                    "/machine:arm64x"
-                } else {
-                    "/machine:x64"
-                };
-                let status = lld_link_command()
-                    .arg("/dll")
-                    .arg("/force:multiple")
-                    .arg(machine)
-                    .arg(format!("/out:{}", dll_output))
-                    .arg("/wholearchive")
-                    .arg(&archive)
-                    .arg(format!("/libpath:{}/crt/lib/{}", xwin_dir, arch))
-                    .arg(format!("/libpath:{}/sdk/lib/um/{}", xwin_dir, arch))
-                    .arg(format!("/libpath:{}/sdk/lib/ucrt/{}", xwin_dir, arch))
-                    .args([
-                        "kernel32.lib",
-                        "ucrt.lib",
-                        "vcruntime.lib",
-                        "ole32.lib",
-                        "user32.lib",
-                        "advapi32.lib",
-                    ])
+                let mut cmd = windows_cross_lld_link(&target, &dll_output, &archive);
+                cmd.args(["ole32.lib", "user32.lib", "advapi32.lib"]);
+                let status = cmd
                     .status()
                     .unwrap_or_else(|e| panic!("Failed to link sge_audio.dll: {}", e));
                 assert!(status.success(), "Failed to link sge_audio.dll");
@@ -518,43 +478,15 @@ fn build_glfw_shared(
     let host = std::env::var("HOST").unwrap_or_default();
     let is_cross = target != host && !target.is_empty();
     if target_os == "windows" && is_cross {
-        let arch = if target.contains("aarch64") {
-            "arm64"
-        } else {
-            "x86_64"
-        };
-        let home = std::env::var("HOME").unwrap_or_default();
-        let xwin_cache = format!("{}/.cache/cargo-xwin/xwin", home);
-        let xwin_dir = if std::path::Path::new(&xwin_cache).exists() {
-            xwin_cache
-        } else {
-            format!("{}/Library/Caches/cargo-xwin/xwin", home)
-        };
         // Convert -lfoo flags to foo.lib
         let link_libs: Vec<String> = framework_args
             .iter()
             .filter(|a| a.starts_with("-l"))
             .map(|a| format!("{}.lib", &a[2..]))
             .collect();
-        // Hybrid ARM64X — see the audio-bridge note above (xwin's arm64 SDK import
-        // libs are arm64ec, so /machine:arm64 conflicts; arm64x consumes both).
-        let machine = if target.contains("aarch64") {
-            "/machine:arm64x"
-        } else {
-            "/machine:x64"
-        };
-        let status = lld_link_command()
-            .arg("/dll")
-            .arg("/force:multiple")
-            .arg(machine)
-            .arg(format!("/out:{}", output))
-            .arg("/wholearchive")
-            .arg(&archive)
-            .arg(format!("/libpath:{}/crt/lib/{}", xwin_dir, arch))
-            .arg(format!("/libpath:{}/sdk/lib/um/{}", xwin_dir, arch))
-            .arg(format!("/libpath:{}/sdk/lib/ucrt/{}", xwin_dir, arch))
-            .args(["kernel32.lib", "ucrt.lib", "vcruntime.lib"])
-            .args(&link_libs)
+        let mut cmd = windows_cross_lld_link(&target, &output, &archive);
+        cmd.args(&link_libs);
+        let status = cmd
             .status()
             .unwrap_or_else(|e| panic!("Failed to link {}: {}", dylib_name, e));
         assert!(status.success(), "Failed to link {}", dylib_name);
@@ -590,6 +522,54 @@ fn link_system_libs(target_os: &str) {
     // The C libraries (audio, GLFW) are separate shared libraries and handle
     // their own system library dependencies.
     let _ = target_os;
+}
+
+/// Build the common lld-link Command for creating a Windows DLL from a static
+/// archive when cross-compiling with cargo-xwin. Caller appends any extra system
+/// import libs (e.g. ole32.lib, gdi32.lib) and then runs it.
+///
+/// Crucial details learned from the cargo-xwin SDK cache on CI:
+///   - The per-arch lib dirs are named `aarch64` / `x86_64` (NOT `arm64`); pointing
+///     at a nonexistent `arm64` dir made our explicit libpaths no-ops.
+///   - The aarch64 SDK import libs are ARM64EC-flavoured, so the output machine must
+///     be arm64ec (forcing /machine:arm64 → "machine type arm64ec conflicts with
+///     arm64"). arm64ec is x64-ABI-compatible and loadable in ARM64 processes.
+///   - `msvcrt.lib` (the dynamic CRT import lib) must be linked so the DLL CRT
+///     startup (`_initterm`, `_onexit`, `terminate`, ...) resolves — those were the
+///     undefined "EC symbol"s when only vcruntime.lib/ucrt.lib were passed.
+fn windows_cross_lld_link(target: &str, dll_output: &str, archive: &str) -> std::process::Command {
+    // xwin per-arch lib dirs are named aarch64 / x86_64.
+    let arch = if target.contains("aarch64") {
+        "aarch64"
+    } else {
+        "x86_64"
+    };
+    let home = std::env::var("HOME").unwrap_or_default();
+    let xwin_cache = format!("{}/.cache/cargo-xwin/xwin", home);
+    let xwin_dir = if std::path::Path::new(&xwin_cache).exists() {
+        xwin_cache
+    } else {
+        format!("{}/Library/Caches/cargo-xwin/xwin", home)
+    };
+    // aarch64 SDK import libs are arm64ec → emit an arm64ec image.
+    let machine = if target.contains("aarch64") {
+        "/machine:arm64ec"
+    } else {
+        "/machine:x64"
+    };
+    let mut cmd = lld_link_command();
+    cmd.arg("/dll")
+        .arg("/force:multiple")
+        .arg(machine)
+        .arg(format!("/out:{}", dll_output))
+        .arg("/wholearchive")
+        .arg(archive)
+        .arg(format!("/libpath:{}/crt/lib/{}", xwin_dir, arch))
+        .arg(format!("/libpath:{}/sdk/lib/um/{}", xwin_dir, arch))
+        .arg(format!("/libpath:{}/sdk/lib/ucrt/{}", xwin_dir, arch))
+        // msvcrt.lib provides the DLL CRT startup (_initterm/_onexit/...).
+        .args(["kernel32.lib", "ucrt.lib", "vcruntime.lib", "msvcrt.lib"]);
+    cmd
 }
 
 /// Create an lld-link Command for Windows DLL cross-linking.
