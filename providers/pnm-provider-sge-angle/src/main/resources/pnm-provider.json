@@ -8,8 +8,8 @@
       "linux-aarch64":   { "binary": "libEGL.so" },
       "macos-x86_64":    { "binary": "libEGL.dylib" },
       "macos-aarch64":   { "binary": "libEGL.dylib" },
-      "windows-x86_64":  { "binary": "libEGL.dll" },
-      "windows-aarch64": { "binary": "libEGL.dll" }
+      "windows-x86_64":  { "binary": "EGL.dll" },
+      "windows-aarch64": { "binary": "EGL.dll" }
     },
     {
       "config-name": "GLESv2",

@@ -121,8 +121,8 @@ lazy val `pnm-provider-sge-angle` = project
       val cross = crossDir.value
       val conv = fileConverter.value
       val libs = Set(
-        "libEGL.dylib", "libEGL.so", "libEGL.dll",
-        "libGLESv2.dylib", "libGLESv2.so", "libGLESv2.dll",
+        "libEGL.dylib", "libEGL.so", "EGL.dll",
+        "libGLESv2.dylib", "libGLESv2.so", "GLESv2.dll",
         "EGL.lib", "GLESv2.lib"
       )
       fatJarMappings(conv, cross, Platform.desktop, libs.contains)

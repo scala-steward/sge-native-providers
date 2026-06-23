@@ -300,7 +300,14 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
 
     let output = format!("{}/{}", release_dir, dylib_name);
     let cc_tool = cc::Build::new().get_compiler();
+    // Carry the compiler's own args (notably `-arch <arch>` / `--target` for
+    // cross builds). Without them the final dylib link defaults to the HOST
+    // architecture: cross-compiling macos-x86_64 from an arm64 host then links
+    // x86_64 objects into a non-functional ~16 KB stub dylib instead of the
+    // real shared library. `.compile()` above already produced a correct
+    // target-arch archive; this link step must target the same arch.
     let status = std::process::Command::new(cc_tool.path())
+        .args(cc_tool.args())
         .args(&link_args)
         .arg("-o")
         .arg(&output)
@@ -379,6 +386,11 @@ fn build_glfw_shared(
         }
         "windows" => {
             build.define("_GLFW_WIN32", None);
+            // Mark GLFW's public API as __declspec(dllexport) so the symbols are
+            // actually exported from the resulting glfw3.dll. MSVC/lld-link export
+            // nothing by default (unlike GNU ld), so without this the DLL links but
+            // exposes no glfw* symbols and the JVM's SymbolLookup.find fails.
+            build.define("_GLFW_BUILD_DLL", None);
             build.define("UNICODE", None);
             build.define("_UNICODE", None);
             if target_env == "gnu" {
@@ -534,6 +546,10 @@ fn build_glfw_shared(
 
     let cc_tool = cc::Build::new().get_compiler();
     let mut cmd = std::process::Command::new(cc_tool.path());
+    // Carry the compiler's own args (notably `-arch <arch>` for apple cross
+    // builds) so the final dylib link targets the cross architecture rather
+    // than the host — otherwise macos-x86_64 GLFW links into a ~16 KB stub.
+    cmd.args(cc_tool.args());
     cmd.arg(shared_flag).arg(whole_archive_flag).arg(&archive);
 
     // On Linux, close the whole-archive group

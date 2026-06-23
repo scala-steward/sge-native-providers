@@ -53,10 +53,20 @@ for platform in $PLATFORMS; do
   # Find and copy libEGL and libGLESv2 (recursively, archives may have subdirs)
   find "$tmp_dir" -name "libEGL.$ext" -exec cp {} "$dest_dir/" \; 2>/dev/null
   find "$tmp_dir" -name "libGLESv2.$ext" -exec cp {} "$dest_dir/" \; 2>/dev/null
-  # Windows: also copy import libraries (.dll.lib) and rename to match sn-provider.json
+  # Windows: stage BOTH name conventions side by side so each provider can pick
+  # the file name it needs from the same cross dir:
+  #   - libEGL.dll / libGLESv2.dll  → consumed by the sn-provider (Scala Native),
+  #     whose loader co-locates the upstream-named DLL next to the static link.
+  #   - EGL.dll / GLESv2.dll        → consumed by the pnm-provider (Panama). SGE
+  #     loads ANGLE via the logical names "EGL"/"GLESv2", which
+  #     NativeLibLoader.mappedFileName maps to EGL.dll/GLESv2.dll (no "lib" prefix)
+  #     on Windows, unlike macOS/Linux where System.mapLibraryName adds it.
+  # Also copy the matching import libraries (.dll.lib → EGL.lib/GLESv2.lib).
   if [ "$ext" = "dll" ]; then
     find "$tmp_dir" -name "libEGL.dll" -exec cp {} "$dest_dir/" \; 2>/dev/null
     find "$tmp_dir" -name "libGLESv2.dll" -exec cp {} "$dest_dir/" \; 2>/dev/null
+    find "$tmp_dir" -name "libEGL.dll" -exec cp {} "$dest_dir/EGL.dll" \; 2>/dev/null
+    find "$tmp_dir" -name "libGLESv2.dll" -exec cp {} "$dest_dir/GLESv2.dll" \; 2>/dev/null
     find "$tmp_dir" -name "libEGL.dll.lib" -exec cp {} "$dest_dir/EGL.lib" \; 2>/dev/null
     find "$tmp_dir" -name "libGLESv2.dll.lib" -exec cp {} "$dest_dir/GLESv2.lib" \; 2>/dev/null
   fi
