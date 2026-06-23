@@ -239,13 +239,14 @@ fn build_audio_bridge_shared(vendor: &str, out_dir: &str, release_dir: &str, tar
                 } else {
                     format!("{}/Library/Caches/cargo-xwin/xwin", home)
                 };
-                // Use /machine:arm64 (a plain ARM64 DLL), NOT /machine:arm64x.
-                // arm64x produces a hybrid ARM64X image that also needs the
-                // ARM64EC-flavoured CRT (initterm/onexit "EC symbol"s); the xwin
-                // crt/ucrt/vcruntime import libs we pass are the pure-ARM64 set, so
-                // arm64x left those EC symbols undefined and the link failed.
+                // cargo-xwin's arm64 SDK import libs are ARM64EC-flavoured (lld-link
+                // reports "machine type arm64ec conflicts with arm64" if we force
+                // /machine:arm64). Build a hybrid ARM64X image, which accepts both the
+                // arm64 objects from our archive and the arm64ec imports, and is
+                // loadable by native ARM64 Windows processes. (Real Homebrew lld-link
+                // resolves the EC CRT from these libs; rustup's rust-lld crashed here.)
                 let machine = if target.contains("aarch64") {
-                    "/machine:arm64"
+                    "/machine:arm64x"
                 } else {
                     "/machine:x64"
                 };
@@ -535,10 +536,10 @@ fn build_glfw_shared(
             .filter(|a| a.starts_with("-l"))
             .map(|a| format!("{}.lib", &a[2..]))
             .collect();
-        // Plain ARM64, not ARM64X — see the audio-bridge note above (arm64x needs
-        // the ARM64EC CRT and leaves EC symbols undefined with the pure-ARM64 libs).
+        // Hybrid ARM64X — see the audio-bridge note above (xwin's arm64 SDK import
+        // libs are arm64ec, so /machine:arm64 conflicts; arm64x consumes both).
         let machine = if target.contains("aarch64") {
-            "/machine:arm64"
+            "/machine:arm64x"
         } else {
             "/machine:x64"
         };
