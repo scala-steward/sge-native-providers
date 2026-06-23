@@ -592,16 +592,41 @@ fn link_system_libs(target_os: &str) {
 }
 
 /// Create an lld-link Command for Windows DLL cross-linking.
-/// Prefers Homebrew's lld (newer, supports arm64 import libs) over rustup's rust-lld.
+///
+/// MUST use a recent LLVM lld: rustup's bundled rust-lld crashes in
+/// `lld::coff::ImportFile::parse()` on the ARM64 Windows SDK import libs
+/// (libpath .../arm64/{kernel32,ucrt,vcruntime}.lib), so the windows-aarch64
+/// DLL cannot be linked with it. Homebrew's `llvm` / `lld` formulae ship a newer
+/// lld-link that parses them fine. Probe those explicit locations first, and only
+/// fall back to a `lld-link` on PATH — never silently to rust-lld.
 fn lld_link_command() -> std::process::Command {
-    // Homebrew lld (brew install lld)
-    let brew_lld = "/opt/homebrew/opt/lld/bin/lld";
-    if std::path::Path::new(brew_lld).exists() {
-        let mut cmd = std::process::Command::new(brew_lld);
-        cmd.arg("-flavor").arg("link");
-        return cmd;
+    // Direct `lld-link` binaries from Homebrew LLVM (preferred — newest, handles
+    // arm64 import libs). Covers both the `llvm` and `lld` formulae on Apple-silicon
+    // (/opt/homebrew) and Intel (/usr/local) Homebrew prefixes.
+    for lld_link in [
+        "/opt/homebrew/opt/llvm/bin/lld-link",
+        "/opt/homebrew/opt/lld/bin/lld-link",
+        "/usr/local/opt/llvm/bin/lld-link",
+        "/usr/local/opt/lld/bin/lld-link",
+    ] {
+        if std::path::Path::new(lld_link).exists() {
+            return std::process::Command::new(lld_link);
+        }
     }
-    // Try lld-link on PATH
+    // `lld` driver invoked in COFF (`link`) flavor.
+    for lld in [
+        "/opt/homebrew/opt/llvm/bin/lld",
+        "/opt/homebrew/opt/lld/bin/lld",
+        "/usr/local/opt/llvm/bin/lld",
+        "/usr/local/opt/lld/bin/lld",
+    ] {
+        if std::path::Path::new(lld).exists() {
+            let mut cmd = std::process::Command::new(lld);
+            cmd.arg("-flavor").arg("link");
+            return cmd;
+        }
+    }
+    // Last resort: lld-link on PATH (CI adds /opt/homebrew/opt/llvm/bin to PATH).
     std::process::Command::new("lld-link")
 }
 
