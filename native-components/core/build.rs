@@ -524,51 +524,40 @@ fn link_system_libs(target_os: &str) {
     let _ = target_os;
 }
 
-/// Build the common lld-link Command for creating a Windows DLL from a static
-/// archive when cross-compiling with cargo-xwin. Caller appends any extra system
-/// import libs (e.g. ole32.lib, gdi32.lib) and then runs it.
+/// Build the link Command for creating a Windows DLL from a static archive when
+/// cross-compiling with cargo-xwin. Caller appends extra system import libs
+/// (e.g. ole32.lib, gdi32.lib) and then runs it.
 ///
-/// Crucial details learned from the cargo-xwin SDK cache on CI:
-///   - The per-arch lib dirs are named `aarch64` / `x86_64` (NOT `arm64`); pointing
-///     at a nonexistent `arm64` dir made our explicit libpaths no-ops.
-///   - The aarch64 SDK import libs are ARM64EC-flavoured, so the output machine must
-///     be arm64ec (forcing /machine:arm64 → "machine type arm64ec conflicts with
-///     arm64"). arm64ec is x64-ABI-compatible and loadable in ARM64 processes.
-///   - `msvcrt.lib` (the dynamic CRT import lib) must be linked so the DLL CRT
-///     startup (`_initterm`, `_onexit`, `terminate`, ...) resolves — those were the
-///     undefined "EC symbol"s when only vcruntime.lib/ucrt.lib were passed.
+/// Drives clang-cl (the xwin-wrapped compiler `cc` returns) with `/LD`, NOT a
+/// hand-rolled lld-link. Hand-picking lld-link's CRT libs proved unworkable: the x64
+/// link worked with kernel32/ucrt/vcruntime but the aarch64 image (arm64ec import
+/// libs) then left the DLL CRT startup `_initterm`/`_onexit` "EC symbol"s undefined,
+/// and adding msvcrt.lib pulled in unresolved dllimport CRT data
+/// (`__argc`/`_commode`/`_daylight`/...), breaking even x64.
+///
+/// clang-cl `/LD` selects the right target machine and links the full DLL CRT for
+/// us. The static archive is passed as a positional linker input (so clang-cl has an
+/// input file) and re-listed under `/wholearchive:` so every export survives.
 fn windows_cross_lld_link(target: &str, dll_output: &str, archive: &str) -> std::process::Command {
-    // xwin per-arch lib dirs are named aarch64 / x86_64.
-    let arch = if target.contains("aarch64") {
-        "aarch64"
-    } else {
-        "x86_64"
-    };
-    let home = std::env::var("HOME").unwrap_or_default();
-    let xwin_cache = format!("{}/.cache/cargo-xwin/xwin", home);
-    let xwin_dir = if std::path::Path::new(&xwin_cache).exists() {
-        xwin_cache
-    } else {
-        format!("{}/Library/Caches/cargo-xwin/xwin", home)
-    };
-    // aarch64 SDK import libs are arm64ec → emit an arm64ec image.
-    let machine = if target.contains("aarch64") {
-        "/machine:arm64ec"
-    } else {
-        "/machine:x64"
-    };
-    let mut cmd = lld_link_command();
-    cmd.arg("/dll")
-        .arg("/force:multiple")
-        .arg(machine)
-        .arg(format!("/out:{}", dll_output))
-        .arg("/wholearchive")
+    let _ = target; // clang-cl already carries --target=<triple> via cc's args.
+    let cc_tool = cc::Build::new().get_compiler();
+    let mut cmd = std::process::Command::new(cc_tool.path());
+    // Carry clang-cl's own args (the xwin --target/winsysroot/imsvc flags).
+    cmd.args(cc_tool.args());
+    // /LD = build a DLL (links the DLL CRT entry point + startup), /Fe<out> names it.
+    // The archive is BOTH a positional input (so clang-cl's front-end has an input
+    // file) and a /wholearchive entry (so all sge_audio_*/glfw* exports are kept).
+    cmd.arg("/LD")
         .arg(archive)
-        .arg(format!("/libpath:{}/crt/lib/{}", xwin_dir, arch))
-        .arg(format!("/libpath:{}/sdk/lib/um/{}", xwin_dir, arch))
-        .arg(format!("/libpath:{}/sdk/lib/ucrt/{}", xwin_dir, arch))
-        // msvcrt.lib provides the DLL CRT startup (_initterm/_onexit/...).
-        .args(["kernel32.lib", "ucrt.lib", "vcruntime.lib", "msvcrt.lib"]);
+        .arg(format!("/Fe:{}", dll_output))
+        .arg("-link")
+        .arg("/force:multiple")
+        .arg(format!("/wholearchive:{}", archive));
+    eprintln!(
+        "cargo:warning=Windows-cross DLL link: {} {:?}",
+        cc_tool.path().display(),
+        cmd.get_args().collect::<Vec<_>>()
+    );
     cmd
 }
 
@@ -580,6 +569,10 @@ fn windows_cross_lld_link(target: &str, dll_output: &str, archive: &str) -> std:
 /// DLL cannot be linked with it. Homebrew's `llvm` / `lld` formulae ship a newer
 /// lld-link that parses them fine. Probe those explicit locations first, and only
 /// fall back to a `lld-link` on PATH — never silently to rust-lld.
+///
+/// Retained for reference: the Windows-cross DLL link now goes through clang-cl
+/// (windows_cross_lld_link), which still uses lld internally but handles the CRT.
+#[allow(dead_code)]
 fn lld_link_command() -> std::process::Command {
     // Explicit override (CI sets SGE_LLD_LINK to an absolute lld-link path found via
     // `brew --prefix llvm`/`which`, so we never depend on guessing the prefix).
