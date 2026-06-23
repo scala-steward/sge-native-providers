@@ -52,15 +52,16 @@ jobs:
           cargo install cargo-zigbuild || true
           cargo install cargo-xwin || true
 
-      - name: Install LLVM and add to PATH
+      - name: Install LLVM + lld and add to PATH
         run: |
-          brew install llvm
-          LLVM_PREFIX="$(brew --prefix llvm)"
-          echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
+          # The `lld` formula (separate from `llvm`) provides lld-link/ld.lld.
+          brew install llvm lld
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix lld)/bin" >> $GITHUB_PATH
           # The Windows DLL cross-link needs a recent lld-link: rustup's bundled
           # rust-lld crashes parsing the ARM64 Windows SDK import libs. Pin the
-          # Homebrew LLVM lld-link explicitly so build.rs can't fall back to it.
-          LLD_LINK="$LLVM_PREFIX/bin/lld-link"
+          # Homebrew lld-link explicitly so build.rs can't fall back to it.
+          LLD_LINK="$(brew --prefix lld)/bin/lld-link"
           ls -l "$LLD_LINK"
           echo "SGE_LLD_LINK=$LLD_LINK" >> $GITHUB_ENV
 
