@@ -34,8 +34,8 @@ fn main() {
     // correctly. When --target is explicit (even if it matches host), cargo uses
     // target/<triple>/<profile>/, but TARGET == HOST so we can't distinguish by comparing them.
     // OUT_DIR is always correct: .../target[/<triple>]/<profile>/build/<pkg>/out
-    let target = std::env::var("TARGET").unwrap_or_default();
-    let host = std::env::var("HOST").unwrap_or_default();
+    // (TARGET/HOST are re-read locally inside the build_*_shared helpers that need them
+    // to detect Windows/Linux cross-compilation.)
     let release_dir = {
         let out = std::path::Path::new(&out_dir);
         // OUT_DIR = .../target[/<triple>]/<profile>/build/<pkg>/out
@@ -53,26 +53,23 @@ fn main() {
 
     let skip_c_libs = std::env::var("SGE_SKIP_C_LIBS").unwrap_or_default() == "1";
     let is_android = target_os == "android";
-    let is_windows = target_os == "windows";
-    let is_cross = target != host && !target.is_empty();
 
-    // On Windows cross-compilation, merge C libs into sge_native_ops.dll instead of
-    // creating separate DLLs. This avoids complex lld-link invocations with Windows SDK
-    // import libs. The JVM NativeLibLoader falls back to sge_native_ops when companion
-    // libs aren't found as separate files.
-    let merge_into_cdylib = is_windows && is_cross;
-
+    // Build SEPARATE sge_audio.dll / glfw3.dll on EVERY platform — including
+    // Windows-cross — exactly like macOS/Linux/native-Windows. The separate-DLL path
+    // (build_audio_bridge_shared / build_glfw_shared) already supports Windows-cross via
+    // lld-link, and both the audio bridge (SGE_AUDIO_API) and GLFW (_GLFW_BUILD_DLL) now
+    // export their public symbols, so the standalone DLLs are actually usable.
+    //
+    // The previous Windows-cross path merged audio+GLFW *objects* into
+    // sge_native_ops.dll, but a Rust cdylib only re-exports #[no_mangle] Rust symbols:
+    // the C audio/glfw symbols were swallowed and exported nowhere, AND the extra C code
+    // destabilised the sge_native_ops load (UnsatisfiedLinkError on Windows JVM). Keeping
+    // sge_native_ops a clean Rust-only cdylib fixes both. The merged path
+    // (build_audio_bridge_merged / build_glfw_merged) is retained but no longer used.
     if !skip_c_libs && !is_android {
-        if merge_into_cdylib {
-            // Compile C code and let cargo link it into sge_native_ops.dll.
-            // cargo_metadata(true) = default, tells cargo to link this archive.
-            build_audio_bridge_merged(&vendor, &target_os);
-            build_glfw_merged(&vendor, &target_os, &target_env);
-        } else {
-            // Create separate shared libraries (macOS, Linux, native Windows builds)
-            build_audio_bridge_shared(&vendor, &out_dir, &release_dir, &target_os);
-            build_glfw_shared(&vendor, &out_dir, &release_dir, &target_os, &target_env);
-        }
+        // Create separate shared libraries (macOS, Linux, Windows — native and cross).
+        build_audio_bridge_shared(&vendor, &out_dir, &release_dir, &target_os);
+        build_glfw_shared(&vendor, &out_dir, &release_dir, &target_os, &target_env);
     } else if !skip_c_libs && is_android {
         // Android only needs audio bridge (no GLFW)
         build_audio_bridge_shared(&vendor, &out_dir, &release_dir, &target_os);
@@ -80,7 +77,7 @@ fn main() {
     link_system_libs(&target_os);
 
     // Copy static archives to release dir for Scala Native static linking.
-    if !skip_c_libs && !merge_into_cdylib {
+    if !skip_c_libs {
         copy_static_archive(&out_dir, &release_dir, "sge_audio_bridge", "sge_audio");
         if !is_android {
             copy_static_archive(&out_dir, &release_dir, "glfw3", "glfw3");
@@ -98,6 +95,10 @@ fn main() {
 
 /// Compile audio bridge and link it into the main sge_native_ops cdylib (Windows cross-compilation).
 /// Uses cargo_metadata(true) so cargo links the C archive into the Rust cdylib.
+///
+/// Retained for reference: no longer called now that Windows-cross builds a separate
+/// sge_audio.dll (a Rust cdylib does not re-export the C symbols, so merging hid them).
+#[allow(dead_code)]
 fn build_audio_bridge_merged(vendor: &str, target_os: &str) {
     let mut build = cc::Build::new();
     build
@@ -118,6 +119,10 @@ fn build_audio_bridge_merged(vendor: &str, target_os: &str) {
 }
 
 /// Compile GLFW and link it into the main sge_native_ops cdylib (Windows cross-compilation).
+///
+/// Retained for reference: no longer called now that Windows-cross builds a separate
+/// glfw3.dll (a Rust cdylib does not re-export the C symbols, so merging hid them).
+#[allow(dead_code)]
 fn build_glfw_merged(vendor: &str, target_os: &str, target_env: &str) {
     let glfw_src = format!("{}/glfw/src", vendor);
     let glfw_include = format!("{}/glfw/include", vendor);
@@ -480,7 +485,12 @@ fn build_glfw_shared(
     let archive = format!("{}/libglfw3.a", out_dir);
     let dylib_name = match target_os {
         "macos" | "ios" => "libglfw.dylib",
-        "windows" => "glfw.dll",
+        // Must be glfw3.dll (not glfw.dll): the artifact-collection step
+        // (scripts/cross-all.sh) and the JVM loader both expect glfw3.dll on
+        // Windows. Naming it glfw.dll here would build the DLL but silently drop
+        // it during collection. (Latent until Windows-cross started using this
+        // separate-DLL path instead of merging into sge_native_ops.dll.)
+        "windows" => "glfw3.dll",
         _ => "libglfw.so",
     };
 

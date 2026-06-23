@@ -207,6 +207,15 @@ jobs:
               "native/$plat/libsge_audio.dylib" \
               "native/$plat/libglfw.dylib"
           done
+          # Windows desktop DLLs: sge_native_ops must stay a clean Rust-only cdylib,
+          # while sge_audio.dll / glfw3.dll are now built and packaged as separate DLLs
+          # (previously merged into sge_native_ops.dll, which hid their symbols).
+          for plat in windows-x86_64 windows-aarch64; do
+            verify_jar "$PNM_CORE_JAR" \
+              "native/$plat/sge_native_ops.dll" \
+              "native/$plat/sge_audio.dll" \
+              "native/$plat/glfw3.dll"
+          done
           verify_jar "$PNM_CORE_JAR" "pnm-provider.json"
 
           # SN FreeType: must have .a for all non-Windows platforms

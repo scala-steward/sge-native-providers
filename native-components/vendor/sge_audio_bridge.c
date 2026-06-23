@@ -26,6 +26,19 @@
 #include <string.h>
 #include <stdint.h>
 
+/* ─── Export macro ─────────────────────────────────────────────────────────
+ * On Windows, MSVC/lld-link export nothing from a DLL by default (unlike GNU
+ * ld), so each public sge_audio_* function must be marked __declspec(dllexport)
+ * to appear in sge_audio.dll's export table. Without this the DLL links but
+ * exposes no symbols and the JVM's SymbolLookup.find / Scala Native @extern
+ * resolution fails. Mirrors GLFW's _GLFW_BUILD_DLL fix. No-op everywhere else.
+ */
+#if defined(_WIN32)
+#define SGE_AUDIO_API __declspec(dllexport)
+#else
+#define SGE_AUDIO_API
+#endif
+
 /* ─── Helper: convert bit depth to ma_format ───────────────────────────── */
 
 static ma_format bit_depth_to_format(int bit_depth) {
@@ -108,7 +121,7 @@ static void pcm_device_callback(ma_device* pDevice, void* pOutput, const void* p
  *  Engine lifecycle
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-int64_t sge_audio_init_engine(int simultaneous_sources, int buffer_size, int buffer_count) {
+SGE_AUDIO_API int64_t sge_audio_init_engine(int simultaneous_sources, int buffer_size, int buffer_count) {
     ma_engine* pEngine = (ma_engine*)malloc(sizeof(ma_engine));
     if (pEngine == NULL) return 0;
 
@@ -127,14 +140,14 @@ int64_t sge_audio_init_engine(int simultaneous_sources, int buffer_size, int buf
     return (int64_t)(uintptr_t)pEngine;
 }
 
-void sge_audio_shutdown_engine(int64_t engine_handle) {
+SGE_AUDIO_API void sge_audio_shutdown_engine(int64_t engine_handle) {
     ma_engine* pEngine = (ma_engine*)(uintptr_t)engine_handle;
     if (pEngine == NULL) return;
     ma_engine_uninit(pEngine);
     free(pEngine);
 }
 
-void sge_audio_update_engine(int64_t engine_handle) {
+SGE_AUDIO_API void sge_audio_update_engine(int64_t engine_handle) {
     /* miniaudio runs its own audio thread — no manual update needed. */
     (void)engine_handle;
 }
@@ -143,7 +156,7 @@ void sge_audio_update_engine(int64_t engine_handle) {
  *  Sound (PCM data in memory)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-int64_t sge_audio_create_sound(
+SGE_AUDIO_API int64_t sge_audio_create_sound(
     int64_t engine_handle,
     const uint8_t* pcm_data, int data_len,
     int channels, int bit_depth, int sample_rate
@@ -224,14 +237,14 @@ int64_t sge_audio_create_sound(
     return (int64_t)(uintptr_t)sge;
 }
 
-void sge_audio_dispose_sound(int64_t sound_handle) {
+SGE_AUDIO_API void sge_audio_dispose_sound(int64_t sound_handle) {
     SgeSound* sge = (SgeSound*)(uintptr_t)sound_handle;
     if (sge == NULL) return;
     free(sge->pPCMData);
     free(sge);
 }
 
-int64_t sge_audio_play_sound(
+SGE_AUDIO_API int64_t sge_audio_play_sound(
     int64_t sound_handle,
     float volume, float pitch, float pan, int loop
 ) {
@@ -272,7 +285,7 @@ int64_t sge_audio_play_sound(
     return (int64_t)(uintptr_t)inst;
 }
 
-void sge_audio_stop_sound(int64_t instance_id) {
+SGE_AUDIO_API void sge_audio_stop_sound(int64_t instance_id) {
     SgeSoundInstance* inst = (SgeSoundInstance*)(uintptr_t)instance_id;
     if (inst == NULL) return;
     ma_sound_stop(&inst->sound);
@@ -281,52 +294,52 @@ void sge_audio_stop_sound(int64_t instance_id) {
     free(inst);
 }
 
-void sge_audio_pause_sound(int64_t instance_id) {
+SGE_AUDIO_API void sge_audio_pause_sound(int64_t instance_id) {
     SgeSoundInstance* inst = (SgeSoundInstance*)(uintptr_t)instance_id;
     if (inst == NULL) return;
     ma_sound_stop(&inst->sound);
 }
 
-void sge_audio_resume_sound(int64_t instance_id) {
+SGE_AUDIO_API void sge_audio_resume_sound(int64_t instance_id) {
     SgeSoundInstance* inst = (SgeSoundInstance*)(uintptr_t)instance_id;
     if (inst == NULL) return;
     ma_sound_start(&inst->sound);
 }
 
-void sge_audio_stop_all_instances(int64_t sound_handle) {
+SGE_AUDIO_API void sge_audio_stop_all_instances(int64_t sound_handle) {
     /* Individual instance tracking would be needed for full support.
        For now, this is a no-op — callers should track and stop instances. */
     (void)sound_handle;
 }
 
-void sge_audio_pause_all_instances(int64_t sound_handle) {
+SGE_AUDIO_API void sge_audio_pause_all_instances(int64_t sound_handle) {
     (void)sound_handle;
 }
 
-void sge_audio_resume_all_instances(int64_t sound_handle) {
+SGE_AUDIO_API void sge_audio_resume_all_instances(int64_t sound_handle) {
     (void)sound_handle;
 }
 
-void sge_audio_set_sound_volume(int64_t instance_id, float volume) {
+SGE_AUDIO_API void sge_audio_set_sound_volume(int64_t instance_id, float volume) {
     SgeSoundInstance* inst = (SgeSoundInstance*)(uintptr_t)instance_id;
     if (inst == NULL) return;
     ma_sound_set_volume(&inst->sound, volume);
 }
 
-void sge_audio_set_sound_pitch(int64_t instance_id, float pitch) {
+SGE_AUDIO_API void sge_audio_set_sound_pitch(int64_t instance_id, float pitch) {
     SgeSoundInstance* inst = (SgeSoundInstance*)(uintptr_t)instance_id;
     if (inst == NULL) return;
     ma_sound_set_pitch(&inst->sound, pitch);
 }
 
-void sge_audio_set_sound_pan(int64_t instance_id, float pan, float volume) {
+SGE_AUDIO_API void sge_audio_set_sound_pan(int64_t instance_id, float pan, float volume) {
     SgeSoundInstance* inst = (SgeSoundInstance*)(uintptr_t)instance_id;
     if (inst == NULL) return;
     ma_sound_set_pan(&inst->sound, pan);
     ma_sound_set_volume(&inst->sound, volume);
 }
 
-void sge_audio_set_sound_looping(int64_t instance_id, int looping) {
+SGE_AUDIO_API void sge_audio_set_sound_looping(int64_t instance_id, int looping) {
     SgeSoundInstance* inst = (SgeSoundInstance*)(uintptr_t)instance_id;
     if (inst == NULL) return;
     ma_sound_set_looping(&inst->sound, looping != 0 ? MA_TRUE : MA_FALSE);
@@ -336,7 +349,7 @@ void sge_audio_set_sound_looping(int64_t instance_id, int looping) {
  *  Music (streaming from file)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-int64_t sge_audio_create_music(int64_t engine_handle, const char* file_path) {
+SGE_AUDIO_API int64_t sge_audio_create_music(int64_t engine_handle, const char* file_path) {
     ma_engine* pEngine = (ma_engine*)(uintptr_t)engine_handle;
     if (pEngine == NULL || file_path == NULL) return 0;
 
@@ -359,59 +372,59 @@ int64_t sge_audio_create_music(int64_t engine_handle, const char* file_path) {
     return (int64_t)(uintptr_t)mus;
 }
 
-void sge_audio_dispose_music(int64_t music_handle) {
+SGE_AUDIO_API void sge_audio_dispose_music(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     ma_sound_uninit(&mus->sound);
     free(mus);
 }
 
-void sge_audio_play_music(int64_t music_handle) {
+SGE_AUDIO_API void sge_audio_play_music(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     ma_sound_seek_to_pcm_frame(&mus->sound, 0);
     ma_sound_start(&mus->sound);
 }
 
-void sge_audio_pause_music(int64_t music_handle) {
+SGE_AUDIO_API void sge_audio_pause_music(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     ma_sound_stop(&mus->sound);
 }
 
-void sge_audio_stop_music(int64_t music_handle) {
+SGE_AUDIO_API void sge_audio_stop_music(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     ma_sound_stop(&mus->sound);
     ma_sound_seek_to_pcm_frame(&mus->sound, 0);
 }
 
-int sge_audio_is_music_playing(int64_t music_handle) {
+SGE_AUDIO_API int sge_audio_is_music_playing(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return 0;
     return ma_sound_is_playing(&mus->sound) ? 1 : 0;
 }
 
-float sge_audio_get_music_volume(int64_t music_handle) {
+SGE_AUDIO_API float sge_audio_get_music_volume(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return 0.0f;
     return mus->volume;
 }
 
-void sge_audio_set_music_volume(int64_t music_handle, float volume) {
+SGE_AUDIO_API void sge_audio_set_music_volume(int64_t music_handle, float volume) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     mus->volume = volume;
     ma_sound_set_volume(&mus->sound, volume);
 }
 
-void sge_audio_set_music_pitch(int64_t music_handle, float pitch) {
+SGE_AUDIO_API void sge_audio_set_music_pitch(int64_t music_handle, float pitch) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     ma_sound_set_pitch(&mus->sound, pitch);
 }
 
-void sge_audio_set_music_pan(int64_t music_handle, float pan, float volume) {
+SGE_AUDIO_API void sge_audio_set_music_pan(int64_t music_handle, float pan, float volume) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     ma_sound_set_pan(&mus->sound, pan);
@@ -419,19 +432,19 @@ void sge_audio_set_music_pan(int64_t music_handle, float pan, float volume) {
     ma_sound_set_volume(&mus->sound, volume);
 }
 
-int sge_audio_is_music_looping(int64_t music_handle) {
+SGE_AUDIO_API int sge_audio_is_music_looping(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return 0;
     return ma_sound_is_looping(&mus->sound) ? 1 : 0;
 }
 
-void sge_audio_set_music_looping(int64_t music_handle, int looping) {
+SGE_AUDIO_API void sge_audio_set_music_looping(int64_t music_handle, int looping) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     ma_sound_set_looping(&mus->sound, looping != 0 ? MA_TRUE : MA_FALSE);
 }
 
-void sge_audio_set_music_position(int64_t music_handle, float position) {
+SGE_AUDIO_API void sge_audio_set_music_position(int64_t music_handle, float position) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return;
     /* Convert seconds to PCM frames using the sound's data source sample rate */
@@ -441,7 +454,7 @@ void sge_audio_set_music_position(int64_t music_handle, float position) {
     ma_sound_seek_to_pcm_frame(&mus->sound, frame);
 }
 
-float sge_audio_get_music_position(int64_t music_handle) {
+SGE_AUDIO_API float sge_audio_get_music_position(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return 0.0f;
     float cursor = 0.0f;
@@ -449,7 +462,7 @@ float sge_audio_get_music_position(int64_t music_handle) {
     return cursor;
 }
 
-float sge_audio_get_music_duration(int64_t music_handle) {
+SGE_AUDIO_API float sge_audio_get_music_duration(int64_t music_handle) {
     SgeMusic* mus = (SgeMusic*)(uintptr_t)music_handle;
     if (mus == NULL) return 0.0f;
     float length = 0.0f;
@@ -461,7 +474,7 @@ float sge_audio_get_music_duration(int64_t music_handle) {
  *  AudioDevice (raw PCM output)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-int64_t sge_audio_create_device(int64_t engine_handle, int sample_rate, int is_mono) {
+SGE_AUDIO_API int64_t sge_audio_create_device(int64_t engine_handle, int sample_rate, int is_mono) {
     (void)engine_handle; /* device is independent of engine */
 
     SgePcmDevice* dev = (SgePcmDevice*)malloc(sizeof(SgePcmDevice));
@@ -505,7 +518,7 @@ int64_t sge_audio_create_device(int64_t engine_handle, int sample_rate, int is_m
     return (int64_t)(uintptr_t)dev;
 }
 
-void sge_audio_dispose_device(int64_t device_handle) {
+SGE_AUDIO_API void sge_audio_dispose_device(int64_t device_handle) {
     SgePcmDevice* dev = (SgePcmDevice*)(uintptr_t)device_handle;
     if (dev == NULL) return;
     ma_device_uninit(&dev->device);
@@ -513,7 +526,7 @@ void sge_audio_dispose_device(int64_t device_handle) {
     free(dev);
 }
 
-void sge_audio_write_device(int64_t device_handle, const uint8_t* data, int offset, int length) {
+SGE_AUDIO_API void sge_audio_write_device(int64_t device_handle, const uint8_t* data, int offset, int length) {
     SgePcmDevice* dev = (SgePcmDevice*)(uintptr_t)device_handle;
     if (dev == NULL || data == NULL || length <= 0) return;
 
@@ -529,25 +542,25 @@ void sge_audio_write_device(int64_t device_handle, const uint8_t* data, int offs
     }
 }
 
-void sge_audio_set_device_volume(int64_t device_handle, float volume) {
+SGE_AUDIO_API void sge_audio_set_device_volume(int64_t device_handle, float volume) {
     SgePcmDevice* dev = (SgePcmDevice*)(uintptr_t)device_handle;
     if (dev == NULL) return;
     dev->volume = volume;
 }
 
-void sge_audio_pause_device(int64_t device_handle) {
+SGE_AUDIO_API void sge_audio_pause_device(int64_t device_handle) {
     SgePcmDevice* dev = (SgePcmDevice*)(uintptr_t)device_handle;
     if (dev == NULL) return;
     ma_device_stop(&dev->device);
 }
 
-void sge_audio_resume_device(int64_t device_handle) {
+SGE_AUDIO_API void sge_audio_resume_device(int64_t device_handle) {
     SgePcmDevice* dev = (SgePcmDevice*)(uintptr_t)device_handle;
     if (dev == NULL) return;
     ma_device_start(&dev->device);
 }
 
-int sge_audio_get_device_latency(int64_t device_handle) {
+SGE_AUDIO_API int sge_audio_get_device_latency(int64_t device_handle) {
     SgePcmDevice* dev = (SgePcmDevice*)(uintptr_t)device_handle;
     if (dev == NULL) return 0;
     /* Return available frames in the ring buffer as a latency estimate */
@@ -558,7 +571,7 @@ int sge_audio_get_device_latency(int64_t device_handle) {
  *  Output device enumeration
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-char** sge_audio_get_output_devices(int64_t engine_handle, int* count_out) {
+SGE_AUDIO_API char** sge_audio_get_output_devices(int64_t engine_handle, int* count_out) {
     if (count_out != NULL) *count_out = 0;
 
     ma_engine* pEngine = (ma_engine*)(uintptr_t)engine_handle;
@@ -592,7 +605,7 @@ char** sge_audio_get_output_devices(int64_t engine_handle, int* count_out) {
     return names;
 }
 
-int sge_audio_switch_output_device(int64_t engine_handle, const char* device_name) {
+SGE_AUDIO_API int sge_audio_switch_output_device(int64_t engine_handle, const char* device_name) {
     /* miniaudio doesn't support hot-switching output devices on the engine.
        A full implementation would require uninit + reinit with a device ID.
        For now, return 0 (failure). */
@@ -601,7 +614,7 @@ int sge_audio_switch_output_device(int64_t engine_handle, const char* device_nam
     return 0;
 }
 
-void sge_audio_free_output_devices(char** devices, int count) {
+SGE_AUDIO_API void sge_audio_free_output_devices(char** devices, int count) {
     if (devices == NULL) return;
     for (int i = 0; i < count; i++) {
         free(devices[i]);
