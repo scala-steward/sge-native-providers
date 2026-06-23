@@ -566,8 +566,28 @@ fn windows_cross_lld_link(target: &str, dll_output: &str, archive: &str) -> std:
     // /LD = build a DLL (links the DLL CRT entry point + startup), /Fe<out> names it.
     // The dummy .c is the compile input; the .lib is whole-archived so every
     // sge_audio_*/glfw* export survives.
+    //
+    // clang-cl treats ANY argument starting with `/` as an MSVC-style option, so an
+    // absolute Unix path like `/Users/.../foo.c` is parsed as the `/U` option and the
+    // driver reports "no input files". clang-cl has no `--`-then-resume parsing, and a
+    // bare `--` would swallow the `/link` separator too. The reliable fix is to make the
+    // compile input NOT start with `/`: run clang-cl with the source file's directory as
+    // the cwd and pass just the bare filename, which the driver recognises as an input by
+    // its `.c` extension. All `/`-prefixed options (/LD, /Fe:, /link, /wholearchive:) are
+    // genuine clang-cl/linker options and are unaffected.
+    let dummy_path = std::path::Path::new(&dummy_c);
+    let dummy_dir = dummy_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let dummy_file = dummy_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(&dummy_c)
+        .to_string();
+    cmd.current_dir(&dummy_dir);
     cmd.arg("/LD")
-        .arg(&dummy_c)
+        .arg(&dummy_file)
         .arg(format!("/Fe:{}", dll_output))
         .arg("-link")
         .arg("/force:multiple")
