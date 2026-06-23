@@ -109,21 +109,27 @@ jobs:
           chmod +x native-components/vendor/fetch-x11-headers.sh
           native-components/vendor/fetch-x11-headers.sh
 
-      - name: Inspect xwin ARM64 SDK lib layout (diagnostic)
-        run: |
-          XWIN="$HOME/Library/Caches/cargo-xwin/xwin"
-          [ -d "$XWIN" ] || XWIN="$HOME/.cache/cargo-xwin/xwin"
-          echo "xwin dir: $XWIN"
-          echo "=== crt/lib dirs ==="; ls "$XWIN/crt/lib" 2>/dev/null || true
-          echo "=== sdk/lib/um dirs ==="; ls "$XWIN/sdk/lib/um" 2>/dev/null || true
-          echo "=== kernel32.lib (arm64) machine ==="
-          "$SGE_LLD_LINK" /dump /headers "$XWIN/sdk/lib/um/arm64/kernel32.lib" 2>/dev/null | head -5 || true
-        continue-on-error: true
-
       - name: Build all 6 desktop targets
         run: |
           chmod +x scripts/cross-all.sh
           scripts/cross-all.sh
+
+      - name: Inspect xwin ARM64 SDK lib layout (diagnostic)
+        if: always()
+        run: |
+          XWIN="$HOME/Library/Caches/cargo-xwin/xwin"
+          [ -d "$XWIN" ] || XWIN="$HOME/.cache/cargo-xwin/xwin"
+          echo "xwin dir: $XWIN"
+          echo "=== tree (2 levels) ==="; find "$XWIN" -maxdepth 3 -type d | sort || true
+          echo "=== crt/lib/* ==="; ls -R "$XWIN/crt/lib" 2>&1 | head -40 || true
+          echo "=== sdk/lib/um/* dirs ==="; ls "$XWIN/sdk/lib/um" 2>&1 || true
+          for a in arm64 arm64ec x86_64 x64; do
+            K="$XWIN/sdk/lib/um/$a/kernel32.lib"
+            if [ -f "$K" ]; then
+              echo "=== kernel32.lib ($a) machine ==="
+              "$SGE_LLD_LINK" /dump /headers "$K" 2>&1 | grep -iE 'machine|arm64|x64' | head -3 || true
+            fi
+          done
 
       - name: Download ANGLE shared libraries
         run: |
