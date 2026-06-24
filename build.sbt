@@ -202,7 +202,17 @@ lazy val `sn-provider-sge` = project
         "libsge_audio.a",
         "libglfw3.a",
         "sge_audio.lib", "glfw3.lib", "glfw.lib",
-        "libobjc.a", "objc.lib"
+        "libobjc.a", "objc.lib",
+        // Windows runtime DLLs: on Windows these libs are linked via import
+        // libraries (sge_native_ops.lib / sge_audio.lib / glfw3.lib reference
+        // the matching DLL), so the DLLs must be present at run time. The
+        // multiarch NativeProviderPlugin copies every .dll it extracts next to
+        // the linked executable (no rpath on Windows), so ship them here — else
+        // the binary links but exits 0xC0000135 STATUS_DLL_NOT_FOUND at startup
+        // (the ANGLE provider already ships EGL.dll/GLESv2.dll for the same
+        // reason). These exist only in the windows-* classifier dirs, so they
+        // are a no-op for the linux/macos mappings.
+        "sge_native_ops.dll", "sge_audio.dll", "glfw3.dll"
       )
       fatJarMappings(conv, cross, Platform.desktop, libs.contains)
     }
