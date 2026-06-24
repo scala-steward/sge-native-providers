@@ -74,9 +74,19 @@ for entry in "${DESKTOP_TARGETS[@]}"; do
   # Shared libraries
   for f in libsge_native_ops.dylib libsge_native_ops.so sge_native_ops.dll sge_native_ops.dll.lib \
            libsge_audio.dylib libsge_audio.so sge_audio.dll \
-           libglfw.dylib libglfw.so glfw3.dll; do
+           libglfw.dylib libglfw.so glfw3.dll glfw3.dll.lib; do
     [ -f "$src_dir/$f" ] && cp "$src_dir/$f" "$dest_dir/"
   done
+
+  # Real GLFW import library (Windows): build.rs emits glfw3.dll.lib next to
+  # glfw3.dll with the genuine GLFW exports (glfwInit, glfwCreateWindow, ...).
+  # Scala Native's @link("glfw3") resolves the bare name "glfw3.lib" on Windows,
+  # so land the file as exactly glfw3.lib. This is the REAL import lib — it must
+  # take precedence over (and never be overwritten by) the companion .lib stub
+  # generated further below.
+  if [ -f "$src_dir/glfw3.dll.lib" ]; then
+    cp "$src_dir/glfw3.dll.lib" "$dest_dir/glfw3.lib"
+  fi
 
   # FreeType, physics, and physics3d libraries (from workspace member crates)
   for f in libsge_freetype.a libsge_freetype.dylib libsge_freetype.so sge_freetype.dll sge_freetype.dll.lib \
@@ -102,12 +112,20 @@ for entry in "${DESKTOP_TARGETS[@]}"; do
   echo "  $classifier: $(ls "$dest_dir" | wc -l | tr -d ' ') files"
 done
 
-# Generate Windows companion .lib stubs
+# Generate Windows companion .lib stubs.
+# NOTE: glfw3/glfw are intentionally NOT stubbed here. A bogus glfw3.lib (a copy
+# of sge_native_ops.lib) exports the wrong symbols, so Scala Native's
+# @link("glfw3") link fails with LNK2019 unresolved external glfwInit (etc).
+# The REAL glfw3.lib import library is produced by build.rs (glfw3.dll.lib) and
+# collected/renamed to glfw3.lib above. The `[ ! -f ... ]` guard below also
+# ensures the real lib is never clobbered even if glfw3 were re-added.
+# (EGL/GLESv2 come from ANGLE via download-angle.sh; sge_audio has no real
+# import lib so it stays a stub.)
 for classifier in windows-x86_64 windows-aarch64; do
   dest_dir="$CROSS_DIR/$classifier"
   SRC="$dest_dir/sge_native_ops.lib"
   if [ -f "$SRC" ]; then
-    for lib in sge_audio glfw3 glfw EGL GLESv2; do
+    for lib in sge_audio EGL GLESv2; do
       [ ! -f "$dest_dir/${lib}.lib" ] && cp "$SRC" "$dest_dir/${lib}.lib"
     done
   fi

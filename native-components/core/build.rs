@@ -586,11 +586,28 @@ fn windows_cross_lld_link(target: &str, dll_output: &str, archive: &str) -> std:
         .unwrap_or(&dummy_c)
         .to_string();
     cmd.current_dir(&dummy_dir);
+    // Emit a REAL import library alongside the DLL. Scala Native's
+    // @link("glfw3") needs a glfw3.lib that actually exports the GLFW symbols
+    // (glfwInit, glfwCreateWindow, ...) so the Windows FFI link resolves them;
+    // without this the linker reports LNK2019/LNK1120 unresolved externals.
+    // The DLL is `<release_dir>/glfw3.dll`, so place the implib next to it as
+    // `<release_dir>/glfw3.dll.lib` — mirroring the cargo-emitted
+    // `sge_native_ops.dll.lib` naming so cross-all.sh collects it the same way.
+    // (clang-cl /LD would emit a `<stem>.lib` next to the cwd otherwise; we set
+    // an explicit absolute path so the artifact lands in release_dir.)
+    let implib_path = {
+        let dll = std::path::Path::new(dll_output);
+        let stem = dll.file_stem().and_then(|s| s.to_str()).unwrap_or("glfw3");
+        dll.with_file_name(format!("{}.dll.lib", stem))
+            .to_string_lossy()
+            .into_owned()
+    };
     cmd.arg("/LD")
         .arg(&dummy_file)
         .arg(format!("/Fe:{}", dll_output))
         .arg("-link")
         .arg("/force:multiple")
+        .arg(format!("/implib:{}", implib_path))
         .arg(format!("/wholearchive:{}", lib_input));
     eprintln!(
         "cargo:warning=Windows-cross DLL link: {} {:?}",
